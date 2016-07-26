@@ -5,10 +5,16 @@
 
 using std::cerr;
 using std::cout;
+using std::endl;
 using std::vector;
 
 using cv::VideoCapture;
 using cv::Mat;
+using cv::Point2f;
+using cv::Point3f;
+using cv::Size;
+
+const Size chessboardSize{4, 3};
 
 void usage()
 {
@@ -50,12 +56,12 @@ int main(int argc, char* argv[])
 		return 1;
 	}
 
-	Mat currFrame;
 	vector<Mat> capturedFrames;
 
 	int pressedKey = 0;
 
 	while (pressedKey != 'n') {
+		Mat currFrame;
 		cap >> currFrame;
 		cv::imshow("Callibrate camera", currFrame);
 		pressedKey = cv::waitKey(1);
@@ -72,7 +78,58 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	for (auto m : capturedFrames) {
+	vector<Point3f> chessboardPoints;
+
+	for (int y = 0; y < chessboardSize.height; y++)	{
+		for(int x = 0; x < chessboardSize.width; x++) {
+			chessboardPoints.push_back(Point3f{(float) x, (float) y, 0});
+		}
+	}
+
+	vector<vector<Point3f>> objectPoints;
+	vector<vector<Point2f>> imagePoints;
+
+	for (auto frame : capturedFrames) {
+		vector<Point2f> corners;
+		bool found = cv::findChessboardCorners(
+				frame,
+				chessboardSize,
+				corners,
+				CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_NORMALIZE_IMAGE | CV_CALIB_CB_FAST_CHECK);
+
+		if (found) {
+			objectPoints.push_back(chessboardPoints);
+			imagePoints.push_back(corners);
+		}
+
+		cv::drawChessboardCorners(frame, chessboardSize, corners, found);
+		cv::imshow("Callibrate camera", frame);
+		if (cv::waitKey(0) == 'q')
+			return 0;
+
+	}
+
+	Mat firstFrame = capturedFrames.front();
+	Mat cameraMatrix, distCoeffs;
+	vector<Mat> rvecs, tvecs;
+
+	double reprojectionError = calibrateCamera(
+		objectPoints,
+		imagePoints,
+		Size{firstFrame.cols, firstFrame.rows},
+		cameraMatrix,
+		distCoeffs,
+		rvecs,
+		tvecs,
+		CV_CALIB_FIX_K4 | CV_CALIB_FIX_K5);
+
+	cout << reprojectionError << endl;
+	cout << cameraMatrix << endl;
+	cout << distCoeffs << endl;
+
+	for (auto frame : capturedFrames) {
+		Mat m;
+		cv::undistort(frame, m, cameraMatrix, distCoeffs);
 		cv::imshow("Callibrate camera", m);
 		if (cv::waitKey(0) == 'q')
 			return 0;
