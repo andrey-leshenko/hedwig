@@ -1,11 +1,9 @@
 #include <iostream>
 #include <vector>
+#include <string>
 
 #include <opencv2/opencv.hpp>
 
-using std::cerr;
-using std::cout;
-using std::endl;
 using std::vector;
 
 using cv::VideoCapture;
@@ -14,63 +12,79 @@ using cv::Point2f;
 using cv::Point3f;
 using cv::Size;
 
-const Size chessboardSize{4, 3};
+const cv::String windowName{"Calibrate camera"};
 
 void usage()
 {
-	std::cout << "Usage: callibrate-camera [CAMERA_INDEX]\n"
-		<< '\n'
-		<< "Find the camera parameters of camera number CAMERA_INDEX.\n"
-		<< "If no camera index is specified, CAMERA_INDEX=0 is assumed.\n"
-		<< '\n'
-		<< "When the callibration window openes and you see the output from the camera,\n"
-		<< "take pictures of a chessboard by pressing the space key.\n"
-		<< "Press 'n' to finish and write the camera parameters to disc as [NAME HERE].\n"
-		<< "Press 'q' to abort.\n";
+	std::cout << "Usage: camera_calibrate CAMERA_INDEX GRID_SIZE [SQUARE_SIZE] [OUTPUT_FILE]\n"
+		"\n"
+		"Find the camera parameters of camera number CAMERA_INDEX\n"
+		"using chessboard calibration.\n"
+		"\n"
+		"First, take photos of the chessboard by pressing the space key.\n"
+		"After you take enough photos press 'n', and you will be able to view\n"
+		"the captured images by pressing any key. When you reach the last image,\n"
+		"the calibration data will be printed to the screen and saved to a file.\n"
+		"You can then view the images again after the undistort operation.\n"
+		"Press 'q' to abort at any time.\n";
 }
 
 int main(int argc, char* argv[])
 {
-	int cameraIndex = 0;
+	int cameraIndex;
+	Size chessboardSize;
+	float chessSquareSize = 1;
+	const char* outputFile = "defaultFile.yaml";
 
-	if (argc > 2) {
+	//////// Parse arguments ////////
+
+	if (argc - 1 < 2 || argc - 1 > 4) {
 		usage();
 		return 1;
 	}
 
-	if (argc == 2) {
-		char* arg = argv[1];
-		char* end;
-		cameraIndex = std::strtol(arg, &end, 0);
+	cameraIndex = std::atoi(argv[1]);
 
-		if (end - arg != std::strlen(arg)) {
-			usage();
-			return 1;
-		}
+	if (sscanf(argv[2], "%dx%d", &chessboardSize.width, &chessboardSize.height) != 2) {
+		usage();
+		return 1;
 	}
+
+	if (3 < argc) {
+		chessSquareSize = std::atof(argv[3]);
+	}
+	if (4 < argc) {
+		outputFile = argv[4];
+	}
+
+	//////// Capture images ////////
 
 	VideoCapture cap{cameraIndex};
 
 	if (!cap.isOpened()) {
-		cerr << "error: couldn't capture camera number " << cameraIndex << '\n';
+		std::cerr << "error: couldn't capture camera number " << cameraIndex << std::endl;
 		return 1;
 	}
 
 	vector<Mat> capturedFrames;
 
 	int pressedKey = 0;
+	Mat currFrame, currFrameFlipped;
 
 	while (pressedKey != 'n') {
-		Mat currFrame;
 		cap >> currFrame;
-		cv::imshow("Callibrate camera", currFrame);
+
+		cv::flip(currFrame, currFrameFlipped, 1);
+		cv::imshow(windowName, currFrameFlipped);
 		pressedKey = cv::waitKey(1);
 
 		if (pressedKey == ' ') {
 			capturedFrames.push_back(currFrame.clone());
 
-			cv::threshold(currFrame, currFrame, 70, 255, CV_THRESH_BINARY_INV);
-			cv::imshow("Callibrate camera", currFrame);
+			cv::setWindowTitle(windowName, windowName + " (" + std::to_string(capturedFrames.size()) + ")");
+
+			cv::threshold(currFrameFlipped, currFrameFlipped, 70, 255, CV_THRESH_BINARY_INV);
+			cv::imshow(windowName, currFrameFlipped);
 			cv::waitKey(60);
 		}
 		else if (pressedKey == 'q') {
@@ -78,18 +92,22 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	vector<Point3f> chessboardPoints;
+	cv::setWindowTitle(windowName, windowName);
 
-	for (int y = 0; y < chessboardSize.height; y++)	{
-		for(int x = 0; x < chessboardSize.width; x++) {
-			chessboardPoints.push_back(Point3f{(float) x, (float) y, 0});
-		}
-	}
+	//////// Detect chessboards ////////
 
 	vector<vector<Point3f>> objectPoints;
 	vector<vector<Point2f>> imagePoints;
 
-	for (auto frame : capturedFrames) {
+	vector<Point3f> chessboardPoints;
+
+	for (int y = 0; y < chessboardSize.height; y++)	{
+		for(int x = 0; x < chessboardSize.width; x++) {
+			chessboardPoints.push_back(Point3f{x * chessSquareSize, y * chessSquareSize, 0});
+		}
+	}
+
+	for (Mat frame : capturedFrames) {
 		vector<Point2f> corners;
 		bool found = cv::findChessboardCorners(
 				frame,
@@ -103,11 +121,17 @@ int main(int argc, char* argv[])
 		}
 
 		cv::drawChessboardCorners(frame, chessboardSize, corners, found);
-		cv::imshow("Callibrate camera", frame);
+		cv::imshow(windowName, frame);
 		if (cv::waitKey(0) == 'q')
 			return 0;
 
 	}
+
+	if (imagePoints.size() == 0) {
+		return 0;
+	}
+
+	//////// Calibrate camera ////////
 
 	Mat firstFrame = capturedFrames.front();
 	Mat cameraMatrix, distCoeffs;
@@ -121,16 +145,19 @@ int main(int argc, char* argv[])
 		distCoeffs,
 		rvecs,
 		tvecs,
-		CV_CALIB_FIX_K4 | CV_CALIB_FIX_K5);
+		0);
 
-	cout << reprojectionError << endl;
-	cout << cameraMatrix << endl;
-	cout << distCoeffs << endl;
+	//////// Display results ////////
 
-	for (auto frame : capturedFrames) {
+	std::cout
+		<< "reprojection error: " << reprojectionError << std::endl
+		<< "camera matrix:\n" << cameraMatrix << std::endl
+		<< "distortion coefficients:\n" << distCoeffs << std::endl;
+
+	for (Mat frame : capturedFrames) {
 		Mat m;
 		cv::undistort(frame, m, cameraMatrix, distCoeffs);
-		cv::imshow("Callibrate camera", m);
+		cv::imshow(windowName, m);
 		if (cv::waitKey(0) == 'q')
 			return 0;
 	}
