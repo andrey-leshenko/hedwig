@@ -11,6 +11,7 @@ using cv::Mat;
 using cv::Point2f;
 using cv::Point3f;
 using cv::Size;
+using cv::FileStorage;
 
 const cv::String windowName{"Calibrate camera"};
 
@@ -34,7 +35,7 @@ int main(int argc, char* argv[])
 	int cameraIndex;
 	Size chessboardSize;
 	float chessSquareSize = 1;
-	const char* outputFile = "defaultFile.yaml";
+	const char* outputFile = "default_cam_calib.yaml";
 
 	//////// Parse arguments ////////
 
@@ -146,6 +147,14 @@ int main(int argc, char* argv[])
 		rvecs,
 		tvecs,
 		0);
+
+	//////// Write output file ////////
+	
+	{
+		FileStorage fs{outputFile, FileStorage::WRITE};
+		fs << "cameraMatrix" << cameraMatrix;
+		fs << "distCoeffs" << distCoeffs;
+	}
 
 	//////// Display results ////////
 
