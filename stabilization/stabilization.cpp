@@ -1,28 +1,52 @@
 #include <iostream>
+#include <vector>
 
 #include <opencv2/opencv.hpp>
+
+using std::vector;
 
 using cv::VideoCapture;
 using cv::Mat;
 
+const vector<int> cameraIndexes{1, 2};
+
 int main()
 {
-	VideoCapture c1{1};
-	VideoCapture c2{2};
+	vector<VideoCapture> cameras;
 
-	Mat frame1;
-	Mat frame2;
+	for (int i : cameraIndexes) {
+		cameras.push_back(VideoCapture{i});
+		if (!cameras.back().isOpened()) {
+			std::cerr << "Couldn't open camera at index " << i << std::endl;
+			return 1;
+		}
+	}
 
-	int pressed_key = 0;
+	vector<Mat> frames(cameras.size());
 
-	while (pressed_key != 'q') {
-		c1 >> frame1;
-		c2 >> frame2;
+	{
+		int pressedKey = 0;
+		int currCamera = 0;
 
-		cv::imshow("window1", frame1);
-		cv::imshow("window2", frame2);
+		while (pressedKey != 'n') {
+			for (int i = 0; i < frames.size(); i++) {
+				cameras[i].grab();
+			}
 
-		pressed_key = cv::waitKey(1);
+			for (int i = 0; i < frames.size(); i++) {
+				cameras[i].retrieve(frames[i]);
+			}
+
+			cv::imshow("w", frames[currCamera]);
+			pressedKey = cv::waitKey(1);
+
+			if (pressedKey == 'j') {
+				currCamera = (currCamera + 1) % cameras.size();
+			}
+			else if (pressedKey == 'k') {
+				currCamera = (currCamera - 1 + cameras.size()) % cameras.size();
+			}
+		}
 	}
 
 	return 0;
