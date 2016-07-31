@@ -8,7 +8,5 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-file(GLOB SOURCES "src/*.cpp")
-
-add_executable(stabilize ${SOURCES})
+add_executable(stabilize stabilization.cpp)
 target_link_libraries(stabilize ${OpenCV_LIBS})
