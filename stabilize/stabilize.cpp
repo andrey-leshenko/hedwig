@@ -32,6 +32,7 @@ int main()
 
 	vector<Mat> frames(cameraCount);
 
+
 	//////// Inspect the camera feeds ////////
 	{
 		int pressedKey = 0;
@@ -58,13 +59,15 @@ int main()
 		}
 	}
 	
-	///////////////////////////////////
-	
 	vector<Mat> cameraMatrixes(cameraCount);
 	
 	{
 		for (int i = 0; i < cameraCount; i++) {
 			FileStorage fs(cameraCalib[i], FileStorage::READ);
+			if (!fs.isOpened()) {
+				std::cerr << "Couldn't open " << cameraCalib[i] << std::endl;
+				return 1;
+			}
 			fs["cameraMatrix"] >> cameraMatrixes[i];
 		}
 	}
@@ -80,8 +83,10 @@ int main()
 	vector<vector<Point2f>> imagePoints(cameraCount);
 	vector<Mat> rvecs(cameraCount);
 	vector<Mat> tvecs(cameraCount);
-	
-	//////////////////////////////////
+	vector<Mat> rodrigues(cameraCount);
+	vector<Mat> rtMatrixes(cameraCount);
+	vector<Mat> projectionMatrixes(cameraCount);
+
 	{
 		for (int i = 0; i < frames.size(); i++) {
 			cameras[i].grab();
@@ -103,7 +108,7 @@ int main()
 				return 1;
 			}			
 		}
-		
+
 		for (int i = 0; i < frames.size(); i++) {
 			bool found = cv::solvePnP(objectPoints, 
 			imagePoints[i], 
@@ -113,14 +118,27 @@ int main()
 			tvecs[i]);
 			
 			if (!found) {
-				std::cerr << "Couldn't callibrate camera." << std::endl;
+				std::cerr << "Couldn't calibrate camera." << std::endl;
+				return 1;
 			}	
 		}
 
 		for (int i = 0; i < frames.size(); i++) {
-			std::cout << cameraCalib[i] << ":" << std::endl << rvecs[i] << std::endl << tvecs[i] << std::endl;
+			cv::Rodrigues(rvecs[i], rodrigues[i]);
+		}
+
+		for (int i = 0; i < frames.size(); i++) {
+			cv::hconcat(vector<Mat>{rodrigues[i] ,tvecs[i]}, rtMatrixes[i]);
+		}
+
+		for (int i = 0; i < frames.size(); i++) {
+			projectionMatrixes[i] = cameraMatrixes[i] * rtMatrixes[i];
 		}
 	}
+
+	Mat homogeneous3D{1, chessboardSize.height * chessboardSize.width, CV_32FC4};
+	cv::triangulatePoints(projectionMatrixes[0], projectionMatrixes[1], imagePoints[0], imagePoints[1], homogeneous3D);
+	std::cout << homogeneous3D << std::endl;
 
 	return 0;
 }
