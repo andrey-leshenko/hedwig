@@ -1,7 +1,9 @@
 #include <iostream>
 #include <vector>
+#include <string>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/viz.hpp>
 
 using std::vector;
 
@@ -11,11 +13,12 @@ using cv::Size;
 using cv::Point2f;
 using cv::Point3f;
 using cv::FileStorage;
+using cv::Affine3d;
 
 const vector<int> cameraIndexes{1, 2};
 const vector<const char*> cameraCalib{"cam3011.yaml", "cam7192.yaml"};
-const Size chessboardSize{9, 6}; 
-const float chessSquareSize = 2.13;
+const Size chessboardSize{8, 5}; 
+const float chessSquareSize = 2.9;
 
 int main()
 {
@@ -32,8 +35,8 @@ int main()
 
 	vector<Mat> frames(cameraCount);
 
-
 	//////// Inspect the camera feeds ////////
+
 	{
 		int pressedKey = 0;
 		int currCamera = 0;
@@ -74,17 +77,16 @@ int main()
 
 	vector<Point3f> objectPoints;
 
-	for (int y = 0; y < chessboardSize.height; y++)	{
+	for (int z = 0; z < chessboardSize.height; z++)	{
 		for(int x = 0; x < chessboardSize.width; x++) {
-			objectPoints.push_back(Point3f{x * chessSquareSize, y * chessSquareSize, 0});
+			objectPoints.push_back(Point3f{x * chessSquareSize, 0, z * chessSquareSize});
 		}
 	}
 	
 	vector<vector<Point2f>> imagePoints(cameraCount);
 	vector<Mat> rvecs(cameraCount);
 	vector<Mat> tvecs(cameraCount);
-	vector<Mat> rodrigues(cameraCount);
-	vector<Mat> rtMatrixes(cameraCount);
+	vector<Affine3d> cameraTransforms(cameraCount);
 	vector<Mat> projectionMatrixes(cameraCount);
 
 	{
@@ -124,21 +126,40 @@ int main()
 		}
 
 		for (int i = 0; i < frames.size(); i++) {
-			cv::Rodrigues(rvecs[i], rodrigues[i]);
-		}
+			cameraTransforms[i] = Affine3d(rvecs[i], tvecs[i]);
+			Mat rtMatrix = Mat{cameraTransforms[i].matrix}.rowRange(0, 3);
+			projectionMatrixes[i] = cameraMatrixes[i] * rtMatrix;
 
-		for (int i = 0; i < frames.size(); i++) {
-			cv::hconcat(vector<Mat>{rodrigues[i] ,tvecs[i]}, rtMatrixes[i]);
-		}
-
-		for (int i = 0; i < frames.size(); i++) {
-			projectionMatrixes[i] = cameraMatrixes[i] * rtMatrixes[i];
+			cameraTransforms[i] = cameraTransforms[i].inv();
 		}
 	}
 
-	Mat homogeneous3D{1, chessboardSize.height * chessboardSize.width, CV_32FC4};
-	cv::triangulatePoints(projectionMatrixes[0], projectionMatrixes[1], imagePoints[0], imagePoints[1], homogeneous3D);
-	std::cout << homogeneous3D << std::endl;
+	vector<Point3f> triangulated;
+
+	{
+		Mat homogeneous;
+		cv::triangulatePoints(projectionMatrixes[0], projectionMatrixes[1], imagePoints[0], imagePoints[1], homogeneous);
+		cv::convertPointsFromHomogeneous(homogeneous.t(), triangulated);
+	}
+
+	cv::destroyAllWindows();
+
+	cv::viz::Viz3d window{"window"};
+
+	for (int i = 0; i < cameraCount; i++) {
+		std::string name = "camera";
+		name += std::to_string(i);
+		cv::viz::WCameraPosition camWidget{cv::Matx33d{cameraMatrixes[i]}, 10};
+		window.showWidget(name, camWidget);
+		cv::Affine3d transform{rvecs[i], tvecs[i]};
+		window.setWidgetPose(name, cameraTransforms[i]);
+	}
+
+	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
+	window.showWidget("chessboard", cv::viz::WCloud{objectPoints});
+	window.showWidget("chessboardTracked", cv::viz::WCloud{triangulated, cv::viz::Color::red()});
+
+	window.spin();
 
 	return 0;
 }
