@@ -134,16 +134,7 @@ int main()
 		}
 	}
 
-	vector<Point3f> triangulated;
-
-	{
-		Mat homogeneous;
-		cv::triangulatePoints(projectionMatrixes[0], projectionMatrixes[1], imagePoints[0], imagePoints[1], homogeneous);
-		cv::convertPointsFromHomogeneous(homogeneous.t(), triangulated);
-	}
-
 	cv::destroyAllWindows();
-
 	cv::viz::Viz3d window{"window"};
 
 	for (int i = 0; i < cameraCount; i++) {
@@ -156,10 +147,42 @@ int main()
 	}
 
 	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
-	window.showWidget("chessboard", cv::viz::WCloud{objectPoints});
-	window.showWidget("chessboardTracked", cv::viz::WCloud{triangulated, cv::viz::Color::red()});
+	window.showWidget("calibrationChessboard", cv::viz::WCloud{objectPoints, cv::viz::Color::red()});
 
-	window.spin();
+	do {
+		for (int i = 0; i < frames.size(); i++) {
+			cameras[i].grab();
+		}
+
+		for (int i = 0; i < frames.size(); i++) {
+			cameras[i].retrieve(frames[i]);
+		}
+
+		bool found;
+
+		for (int i = 0; i < frames.size(); i++) {
+			found = cv::findChessboardCorners(
+					frames[i],
+					chessboardSize,
+					imagePoints[i],
+					CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_NORMALIZE_IMAGE | CV_CALIB_CB_FAST_CHECK);
+			if (!found) {
+				break;
+			}
+		}
+
+		if (found) {
+			Mat homogeneous;
+			cv::triangulatePoints(projectionMatrixes[0], projectionMatrixes[1], imagePoints[0], imagePoints[1], homogeneous);
+
+			vector<Point3f> triangulated;
+			cv::convertPointsFromHomogeneous(homogeneous.t(), triangulated);
+			window.showWidget("chessboard", cv::viz::WCloud{triangulated});
+			window.setRenderingProperty("chessboard", cv::viz::POINT_SIZE, 4);
+		}
+
+		window.spinOnce(1, true);
+	} while (!window.wasStopped());
 
 	return 0;
 }
