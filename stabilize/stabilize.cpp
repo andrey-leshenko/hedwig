@@ -116,7 +116,15 @@ int main()
 	}
 
 	Point3f initialPosition = pointsMean(objectPoints);
-	Mat initialPoints = createPointMatrix(objectPoints);
+
+	vector<Point3f> movedPoints(objectPoints.size());
+	for (int i = 0; i < objectPoints.size(); i++) {
+		movedPoints[i].x = objectPoints[i].x - initialPosition.x;
+		movedPoints[i].y = objectPoints[i].y - initialPosition.y;
+		movedPoints[i].z = objectPoints[i].z - initialPosition.z;
+	}
+
+	Mat initialPoints = createPointMatrix(movedPoints);
 
 	//////// Calculate Projection matrices for each camera ////////
 
@@ -187,7 +195,7 @@ int main()
 	//////// Triangulate and visualize the outputted data ////////
 
 	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
-	window.showWidget("drone", cv::viz::WCube{Point3f{-20, -5, -20}, Point3f{20, 5, 20}});
+	window.showWidget("drone", cv::viz::WCube{Point3f{-20, -5, -20}, Point3f{20, 5, 20}, false});
 	window.showWidget("calibrationChessboard", cv::viz::WCloud{objectPoints, cv::viz::Color::red()});
 
 	do {
@@ -221,7 +229,15 @@ int main()
 
 			Point3f currentPosition = pointsMean(triangulated);
 
-			Mat currPoints = createPointMatrix(triangulated);
+			// REWRITE!!!!!!
+			vector<Point3f> movedPoints2(objectPoints.size());
+			for (int i = 0; i < triangulated.size(); i++) {
+				movedPoints2[i].x = triangulated[i].x - currentPosition.x;
+				movedPoints2[i].y = triangulated[i].y - currentPosition.y;
+				movedPoints2[i].z = triangulated[i].z - currentPosition.z;
+			}
+
+			Mat currPoints = createPointMatrix(movedPoints2);
 			Affine3f currTransform;
 
 			{
@@ -233,10 +249,10 @@ int main()
 				int d = 1;
 				if(det < 0)
 					d = -1;
-				if(det == 0)
-					d = 0;
+				//if(det == 0)
+					//d = 0;
 				Mat diagonal = Mat::eye(3, 3, CV_32F);
-				diagonal.at<float>(3,3) = d;
+				diagonal.at<float>(2,2) = d;
 				Mat u = rsft.t() * diagonal * lsf.t();
 
 				currTransform.rotation(u);
