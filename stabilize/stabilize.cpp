@@ -21,10 +21,10 @@ using cv::Vec3f;
 
 const vector<int> cameraIndexes{1, 2};
 const vector<const char*> cameraCalib{"cam3011.yaml", "cam7192.yaml"};
-const Size chessboardSize{5, 4};
+const Size chessboardSize{8, 5};
 const float chessSquareSize = 3.025;
 
-Point3f pointsMean(const vector<Point3f>& points)
+Point3f centroid(const vector<Point3f>& points)
 {
 	Point3f sum;
 	for (Point3f p : points) {
@@ -38,12 +38,12 @@ Point3f pointsMean(const vector<Point3f>& points)
 
 Mat createPointMatrix(const vector<Point3f>& points)
 {
-	Mat m{static_cast<int>(points.size()), 3, CV_32F};
+	Mat m{3, static_cast<int>(points.size()), CV_32F};
 
 	for (int i = 0; i < points.size(); i++) {
-		m.at<float>(i,1) = points[i].x;
-		m.at<float>(i,2) = points[i].y;
-		m.at<float>(i,3) = points[i].z;
+		m.at<float>(0,i) = points[i].x;
+		m.at<float>(1,i) = points[i].y;
+		m.at<float>(2,i) = points[i].z;
 	}
 	return m;
 }
@@ -107,24 +107,30 @@ int main()
 
 	//////// Calculate the chessboard's initial position ////////
 
-	vector<Point3f> objectPoints;
+	vector<Point3f> initialPoints;
+
+	//for (int z = 0; z < chessboardSize.height; z++)	{
+	//	for(int x = 0; x < chessboardSize.width; x++) {
+	//		initialPoints.push_back(Point3f{x * chessSquareSize, 0, z * chessSquareSize});
+	//	}
+	//}
 
 	for (int z = 0; z < chessboardSize.height; z++)	{
 		for(int x = 0; x < chessboardSize.width; x++) {
-			objectPoints.push_back(Point3f{x * chessSquareSize, 0, z * chessSquareSize});
+			initialPoints.push_back(Point3f{x * chessSquareSize, (chessboardSize.height - z) * chessSquareSize, 0});
 		}
 	}
 
-	Point3f initialPosition = pointsMean(objectPoints);
+	Point3f initialPosition = centroid(initialPoints);
 
-	vector<Point3f> movedPoints(objectPoints.size());
-	for (int i = 0; i < objectPoints.size(); i++) {
-		movedPoints[i].x = objectPoints[i].x - initialPosition.x;
-		movedPoints[i].y = objectPoints[i].y - initialPosition.y;
-		movedPoints[i].z = objectPoints[i].z - initialPosition.z;
+	vector<Point3f> initialPointsCentered(initialPoints.size());
+	for (int i = 0; i < initialPoints.size(); i++) {
+		initialPointsCentered[i].x = initialPoints[i].x - initialPosition.x;
+		initialPointsCentered[i].y = initialPoints[i].y - initialPosition.y;
+		initialPointsCentered[i].z = initialPoints[i].z - initialPosition.z;
 	}
 
-	Mat initialPoints = createPointMatrix(movedPoints);
+	Mat initialPointsCenteredMat = createPointMatrix(initialPointsCentered);
 
 	//////// Calculate Projection matrices for each camera ////////
 
@@ -159,7 +165,7 @@ int main()
 		}
 
 		for (int i = 0; i < frames.size(); i++) {
-			bool found = cv::solvePnP(objectPoints,
+			bool found = cv::solvePnP(initialPoints,
 			imagePoints[i],
 			cameraMatrixes[i],
 			Mat{},
@@ -195,8 +201,10 @@ int main()
 	//////// Triangulate and visualize the outputted data ////////
 
 	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
-	window.showWidget("drone", cv::viz::WCube{Point3f{-20, -5, -20}, Point3f{20, 5, 20}, false});
-	window.showWidget("calibrationChessboard", cv::viz::WCloud{objectPoints, cv::viz::Color::red()});
+	//window.showWidget("drone", cv::viz::WCube{Point3f{-20, -5, -20}, Point3f{20, 5, 20}, true});
+	window.showWidget("drone", cv::viz::WCube{Point3f{-10, -10, -2}, Point3f{10, 10, 2}, true});
+	//window.showWidget("calibrationChessboard", cv::viz::WCloud{initialPointsCentered, cv::viz::Color::red()});
+	//window.setRenderingProperty("calibrationChessboard", cv::viz::POINT_SIZE, 4);
 
 	do {
 		for (int i = 0; i < frames.size(); i++) {
@@ -224,43 +232,49 @@ int main()
 			Mat homogeneous;
 			cv::triangulatePoints(projectionMatrixes[0], projectionMatrixes[1], imagePoints[0], imagePoints[1], homogeneous);
 
-			vector<Point3f> triangulated;
-			cv::convertPointsFromHomogeneous(homogeneous.t(), triangulated);
+			vector<Point3f> currPoints;
+			cv::convertPointsFromHomogeneous(homogeneous.t(), currPoints);
 
-			Point3f currentPosition = pointsMean(triangulated);
+			Point3f currPosition = centroid(currPoints);
 
-			// REWRITE!!!!!!
-			vector<Point3f> movedPoints2(objectPoints.size());
-			for (int i = 0; i < triangulated.size(); i++) {
-				movedPoints2[i].x = triangulated[i].x - currentPosition.x;
-				movedPoints2[i].y = triangulated[i].y - currentPosition.y;
-				movedPoints2[i].z = triangulated[i].z - currentPosition.z;
+			vector<Point3f> currPointsCentered(initialPoints.size());
+			for (int i = 0; i < currPoints.size(); i++) {
+				currPointsCentered[i].x = currPoints[i].x - currPosition.x;
+				currPointsCentered[i].y = currPoints[i].y - currPosition.y;
+				currPointsCentered[i].z = currPoints[i].z - currPosition.z;
 			}
 
-			Mat currPoints = createPointMatrix(movedPoints2);
+			Mat currPointsCenteredMat = createPointMatrix(currPointsCentered);
+
 			Affine3f currTransform;
 
 			{
-				Mat covarianceMatrix{initialPoints.t() * currPoints};
-				Mat lsf, rsft, sv;
+				Mat covarianceMatrix{initialPointsCenteredMat * currPointsCenteredMat.t()};
+				Mat u, s, vt;
 
-				SVD::compute(covarianceMatrix, sv, lsf, rsft);
-				double det = cv::determinant(rsft.t() * lsf.t());
-				int d = 1;
-				if(det < 0)
-					d = -1;
-				//if(det == 0)
-					//d = 0;
-				Mat diagonal = Mat::eye(3, 3, CV_32F);
-				diagonal.at<float>(2,2) = d;
-				Mat u = rsft.t() * diagonal * lsf.t();
+				SVD::compute(covarianceMatrix, s, u, vt); // cov = u * s * vt
+				Mat rot = vt.t() * u.t();
 
-				currTransform.rotation(u);
-				currTransform.translation(Vec3f{currentPosition} - Vec3f{initialPosition});
+				if (cv::determinant(rot) < 0)
+				{
+					Mat thirdCol = rot.col(2);
+					thirdCol *= -1;
+				}
+
+				//Mat diagonal = Mat::eye(3, 3, CV_32F);
+				//diagonal.at<float>(2,2) = d;
+				//Mat u = rsft.t() * diagonal * lsf.t();
+
+				currTransform.rotation(rot);
+
+				//currTransform.translation(Vec3f{currPosition} - Vec3f{initialPosition});
+				// For Testing:
+				currTransform.translation(Vec3f{currPosition});
 			}
 
-			window.showWidget("chessboard", cv::viz::WCloud{triangulated});
+			window.showWidget("chessboard", cv::viz::WCloud{currPoints});
 			window.setRenderingProperty("chessboard", cv::viz::POINT_SIZE, 4);
+
 			window.setWidgetPose("drone", currTransform);
 
 			int post = cv::getTickCount();
