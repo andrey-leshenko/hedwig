@@ -1,3 +1,8 @@
+//
+// Written by Andrey Leshenko, Eli Tarnarutsky and Shir Amir.
+// Published under the MIT license.
+//
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -16,11 +21,10 @@ using cv::FileStorage;
 using cv::Affine3f;
 using cv::Affine3d;
 using cv::SVD;
-using cv::Scalar;
 using cv::Vec3f;
 
 const vector<int> cameraIndexes{1, 2};
-const vector<const char*> cameraCalib{"cam3011.yaml", "cam7192.yaml"};
+const vector<const char*> cameraCalib{"../../calib_data/ps_eye.yaml", "../../calib_data/ps_eye.yaml"};
 const Size chessboardSize{8, 5};
 const float chessSquareSize = 3.025;
 
@@ -156,15 +160,9 @@ int main()
 
 	vector<Point3f> initialPoints;
 
-	//for (int z = 0; z < chessboardSize.height; z++)	{
-	//	for(int x = 0; x < chessboardSize.width; x++) {
-	//		initialPoints.push_back(Point3f{x * chessSquareSize, 0, z * chessSquareSize});
-	//	}
-	//}
-
 	for (int z = 0; z < chessboardSize.height; z++)	{
 		for(int x = 0; x < chessboardSize.width; x++) {
-			initialPoints.push_back(Point3f{x * chessSquareSize, (chessboardSize.height - z) * chessSquareSize, 0});
+			initialPoints.push_back(Point3f{x * chessSquareSize, 0, z * chessSquareSize});
 		}
 	}
 
@@ -193,11 +191,11 @@ int main()
 
 		for (int i = 0; i < frames.size(); i++) {
 			bool found = cv::solvePnP(initialPoints,
-			imagePoints[i],
-			cameraMatrixes[i],
-			Mat{},
-			rvecs[i],
-			tvecs[i]);
+				imagePoints[i],
+				cameraMatrixes[i],
+				Mat{},
+				rvecs[i],
+				tvecs[i]);
 
 			if (!found) {
 				std::cerr << "Couldn't calibrate camera." << std::endl;
@@ -209,6 +207,10 @@ int main()
 			cameraTransforms[i] = Affine3d(rvecs[i], tvecs[i]);
 			Mat rtMatrix = Mat{cameraTransforms[i].matrix}.rowRange(0, 3);
 			projectionMatrixes[i] = cameraMatrixes[i] * rtMatrix;
+			// We found how to transform points so a camera placed
+			// at the origin will see them. Assuming that points were at
+			// the origin in the first place, the location of the camera
+			// is the inverse of that transformation.
 			cameraTransforms[i] = cameraTransforms[i].inv();
 		}
 	}
@@ -229,8 +231,7 @@ int main()
 	}
 
 	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
-	//window.showWidget("drone", cv::viz::WCube{Point3f{-20, -5, -20}, Point3f{20, 5, 20}, true});
-	window.showWidget("drone", cv::viz::WCube{Point3f{-10, -10, -2}, Point3f{10, 10, 2}, true});
+	window.showWidget("drone", cv::viz::WCube{Point3f{-10, -2, -10}, Point3f{10, 2, 10}, true});
 
 	do {
 		window.spinOnce(1, true);
@@ -245,6 +246,8 @@ int main()
 		cv::triangulatePoints(projectionMatrixes[0], projectionMatrixes[1], imagePoints[0], imagePoints[1], homogeneous);
 
 		vector<Point3f> currPoints;
+		// Using a vector of points or the matrix before transposition doesn't work
+		// because of some strange OpenCV problems.
 		cv::convertPointsFromHomogeneous(homogeneous.t(), currPoints);
 
 		Point3f currPosition = centroid(currPoints);

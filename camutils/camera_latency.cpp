@@ -1,3 +1,8 @@
+//
+// Written by Andrey Leshenko, Eli Tarnarutsky and Shir Amir.
+// Published under the MIT license.
+//
+
 #include <iostream>
 #include <chrono>
 
