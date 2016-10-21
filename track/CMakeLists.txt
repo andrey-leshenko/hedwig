@@ -8,5 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(OpenCV REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-add_executable(track track.cpp)
+file(GLOB source_files "*.cpp" "arduino/*.cpp")
+
+add_executable(track ${source_files})
 target_link_libraries(track ${OpenCV_LIBS})

@@ -6,22 +6,22 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <math.h>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/viz.hpp>
 
-using std::vector;
+#include "pid.hpp"
+#include "base.hpp"
+#include "util.hpp"
+#include "chessboard.hpp"
+#include "arduino/arduino_send.hpp"
 
-using cv::VideoCapture;
-using cv::Mat;
-using cv::Size;
-using cv::Point2f;
-using cv::Point3f;
 using cv::FileStorage;
 using cv::Affine3f;
 using cv::Affine3d;
+using cv::Vec4f;
 using cv::SVD;
-using cv::Vec3f;
 
 const vector<int> cameraIndexes{1, 2};
 const vector<const char*> cameraCalib{"../../calib_data/ps_eye.yaml", "../../calib_data/ps_eye.yaml"};
@@ -77,17 +77,65 @@ void captureCameraFrames(vector<VideoCapture>& cameras, vector<Mat>& frames)
 bool findChessboards(const vector<Mat> images, Size chessboardSize, vector<vector<Point2f>>& pointsOut)
 {
 	for (int i = 0; i < images.size(); i++) {
-		bool found = cv::findChessboardCorners(
+		// Our brand new chessboard detection algorithm
+		bool found = findChessboardSquares(
 				images[i],
 				chessboardSize,
 				pointsOut[i],
-				CV_CALIB_CB_ADAPTIVE_THRESH | CV_CALIB_CB_NORMALIZE_IMAGE | CV_CALIB_CB_FAST_CHECK);
+				CV_CALIB_CB_ADAPTIVE_THRESH);
 
 		if (!found) {
 			return false;
 		}
 	}
 	return true;
+}
+
+//
+// Implemented according to Nghia Ho's
+// "Decomposing and Composing a 3x3 Rotation Matrix"
+// http://nghiaho.com/?page_id=846
+//
+
+Vec4f positionError(Vec3f currPos, Mat currRotation, Vec3f targetPos)
+{
+    float   yawError; // in radians
+    Vec2f   currPosCenteredProj,
+            targetPosCenteredProj;
+    Vec4f   posError;
+
+	// TODO: Find the yaw from the forward vector
+
+    float r31 = currRotation.at<float>(2, 0);
+    float r32 = currRotation.at<float>(2, 1);
+    float r33 = currRotation.at<float>(2, 2);
+
+    yawError = atan2(-r31, sqrt(r32 * r32 + r33 * r33));
+
+    Mat yRotation = (cv::Mat_<float>(3,3) <<
+                        cos(yawError) , 0       , sin(yawError),
+                        0             , 1       , 0            ,
+                        -sin(yawError), 0       , cos(yawError));
+
+    yRotation = yRotation.inv();
+    posError[1] = targetPos[1] - currPos[1];
+    posError[3] = yawError;
+
+    Mat targetPosRotated = yRotation * Mat(targetPos);
+    Mat currPosRotated = yRotation * Mat(currPos);
+
+    currPosCenteredProj =   {  currPosRotated.at<float>(0,0) ,
+                                    currPosRotated.at<float>(2,0) };
+    targetPosCenteredProj = {  targetPosRotated.at<float>(0,0) ,
+                                    targetPosRotated.at<float>(2,0) };
+
+    targetPosCenteredProj -= currPosCenteredProj;
+    currPosCenteredProj -= currPosCenteredProj;
+
+    posError[0] = targetPosCenteredProj[0] - currPosCenteredProj[0];
+    posError[2] = targetPosCenteredProj[1] - currPosCenteredProj[1];
+
+    return posError;
 }
 
 int main()
@@ -233,6 +281,8 @@ int main()
 	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
 	window.showWidget("drone", cv::viz::WCube{Point3f{-10, -2, -10}, Point3f{10, 2, 10}, true});
 
+	s64 lastFrameTickCount = cv::getTickCount();
+
 	do {
 		window.spinOnce(1, true);
 
@@ -255,13 +305,15 @@ int main()
 		Mat currPointsCenteredMat = createPointMatrix(currPointsCentered);
 
 		Affine3f currTransform;
+		Mat rot;
+		Vec3f pos;
 
 		{
 			Mat covarianceMatrix{initialPointsCenteredMat * currPointsCenteredMat.t()};
 			Mat u, s, vt;
 
 			SVD::compute(covarianceMatrix, s, u, vt); // cov = u * s * vt
-			Mat rot = vt.t() * u.t();
+			rot = vt.t() * u.t();
 
 			if (cv::determinant(rot) < 0)
 			{
@@ -269,9 +321,35 @@ int main()
 			}
 
 			currTransform.rotation(rot);
+			pos = Vec3f{currPosition} - Vec3f{initialPosition};
+			pos = Vec3f{currPosition};
+			currTransform.translation(pos);
+		}
 
-			//currTransform.translation(Vec3f{currPosition} - Vec3f{initialPosition});
-			currTransform.translation(Vec3f{currPosition});
+		{
+			Vec3f targetPos = {0, 0, 0};
+			Vec4f posError = positionError(pos, rot, targetPos);
+
+			std::cout << posError << "\n";
+
+			Pid pidArray[4] = {
+				{0.1, 0, 0},
+				{1, 10, 0},
+				{0.1, 0, 0},
+				{0.1, 0, 0}
+			};
+
+			float pidRes[4];
+			float deltaTime = (float)(cv::getTickCount() - lastFrameTickCount) / cv::getTickFrequency();
+			lastFrameTickCount = cv::getTickCount();
+
+			for (int i = 0; i < 4; i++)
+			{
+				pidRes[i] = pidArray[i].calculate(posError[i], deltaTime); //minimal framerate: adjust later
+				std::cout << pidRes[i] << "\n";
+			}
+
+			control_drone(pidRes[0], pidRes[1], pidRes[2], pidRes[3]);
 		}
 
 		window.showWidget("chessboard", cv::viz::WCloud{currPoints});
