@@ -1,4 +1,4 @@
-# OpenCV Installation Script
+# OpenCV Fedora Installation Script
 # Based on http://milq.github.io/install-opencv-ubuntu-debian
 
 # FAQ:
