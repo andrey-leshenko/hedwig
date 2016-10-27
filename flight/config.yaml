@@ -1,0 +1,42 @@
+%YAML:1.0
+
+camera_count: 2
+camera_indexes: [0, 1]
+
+calibration_chessboard_size: [7, 4]
+calibration_chessboard_square_size: 3.025 
+
+extrinsic_calibration_data_path: "./extrinsic_calib.yaml"
+
+drone_chessboard_size: [7, 4]
+
+drone_possible_serial_devices:
+    - "/dev/ttyACM0"
+    - "/dev/ttyACM1"
+
+drone_channel_bounds:
+    right:     [127, 64, 0]
+    forward:   [0, 64, 127]
+    up:        [10, 30, 60]
+    clockwise: [127, 64, 0]
+
+drone_pid_parameters:
+    right:     {kp: 0.01, ki: 0, kd: 0}
+    forward:   {kp: 0.01, ki: 0, kd: 0}
+    up:        {kp: 0.01, ki: 0, kd: 0}
+    clockwise: {kp: 0.3, ki: 0, kd: 0}
+
+intrinsic_calibration_data:
+    camera_matrix: !!opencv-matrix
+        rows: 3
+        cols: 3
+        dt: d
+        data: [ 5.3861457315155928e+02, 0., 3.1013010257096545e+02, 0.,
+            5.3811239332913271e+02, 2.2706622282187857e+02, 0., 0., 1. ]
+    dist_coeffs: !!opencv-matrix
+       rows: 1
+       cols: 5
+       dt: d
+       data: [ -1.2054914520367005e-01, 1.4743754398718936e-01,
+           -4.0763258008638410e-03, 1.8379108317725899e-03,
+           1.8003214116660412e-03 ]

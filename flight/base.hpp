@@ -18,6 +18,10 @@ using cv::OutputArray;
 
 using cv::VideoCapture;
 
+using cv::Vec4d;
+using cv::Vec4f;
+using cv::Vec4i;
+
 using cv::Point3d;
 using cv::Point3f;
 using cv::Point3i;
@@ -32,9 +36,14 @@ using cv::Vec2d;
 using cv::Vec2f;
 using cv::Vec2i;
 
+using cv::Affine3f;
+using cv::Affine3d;
+
 using cv::Point;
 using cv::Size;
 using cv::Range;
+
+using cv::String;
 
 typedef int8_t s8;
 typedef int16_t s16;
