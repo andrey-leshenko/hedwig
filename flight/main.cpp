@@ -196,6 +196,27 @@ int sendToDrone(int serialfd, int channels[4])
 	return 0;
 }
 
+struct KeyboardState
+{
+	unsigned char keyPressed[256];
+	unsigned char keyDown[256];
+	int modifiers;
+};
+
+void keyboardClearDownKeys(KeyboardState *keyboard)
+{
+	memset(keyboard->keyDown, 0, 256);
+}
+
+void vizUpdateKeyboardStateCallback(const cv::viz::KeyboardEvent &e, void* keyboardState)
+{
+	KeyboardState *state = (KeyboardState*)keyboardState;
+
+	state->keyPressed[e.code] = e.action;
+	state->keyDown[e.code] = e.action;
+	state->modifiers = e.modifiers;
+}
+
 int main(int argc, char *argv[])
 {
 	Config cfg;
@@ -267,8 +288,6 @@ int main(int argc, char *argv[])
 		saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
 	}
 
-	// TODO: Load extrinsic parameters
-	
 	vector<Point3f> initialPoints;
 
 	while (!triangulateChessboardPoints(initialPoints, cameras, cfg.droneChessboardSize)) {
@@ -284,8 +303,10 @@ int main(int argc, char *argv[])
 	vector<Point3f> currPointsCentered;
 	Mat currPointsCenteredMat;
 
-
 	cv::viz::Viz3d window{"Flight Control"};
+
+	KeyboardState keyboard = {0};
+	window.registerKeyboardCallback(&vizUpdateKeyboardStateCallback, &keyboard);
 
 	addCamerasToViz(cameras, window);
 	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
@@ -354,6 +375,15 @@ int main(int argc, char *argv[])
 			window.setBackgroundColor(cv::viz::Color{35, 35, 255}, cv::viz::Color{0, 0, 255});
 		}
 
+		if (keyboard.keyDown['c']) {
+			bool done = doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
+			if (!done) {
+				std::cerr << "ERROR: Couldn't do external calibration - chessboard not found." << std::endl;
+				std::cout << '\a';
+			}
+		}
+
+		keyboardClearDownKeys(&keyboard);
 		window.spinOnce();
 	}
 
