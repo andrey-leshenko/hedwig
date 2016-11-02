@@ -73,8 +73,6 @@ Mat svdRotation(Mat &initialPointsCenteredMat, Mat &currPointsCenteredMat)
 	return rot;
 }
 
-#include "util.hpp"
-
 void saveExternalCalibrationToFile(CameraData &cameras, const char *file)
 {
 	FileStorage fs(file, FileStorage::WRITE);
@@ -345,6 +343,15 @@ int main(int argc, char *argv[])
 
 			window.setWidgetPose("drone", currTransform);
 			window.setWidgetPose("drone_direction", currTransform);
+		}
+
+
+		if (found) {
+			// NOTE(Andrey): Default Viz background
+			window.setBackgroundColor(cv::viz::Color{2, 1, 1}, cv::viz::Color{240, 120, 120});
+		}
+		else {
+			window.setBackgroundColor(cv::viz::Color{35, 35, 255}, cv::viz::Color{0, 0, 255});
 		}
 
 		window.spinOnce();
