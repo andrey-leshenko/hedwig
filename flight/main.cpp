@@ -376,11 +376,7 @@ int main(int argc, char *argv[])
 		}
 
 		if (keyboard.keyDown['c']) {
-			bool done = doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
-			if (!done) {
-				std::cerr << "ERROR: Couldn't do external calibration - chessboard not found." << std::endl;
-				std::cout << '\a';
-			}
+			doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
 		}
 
 		keyboardClearDownKeys(&keyboard);

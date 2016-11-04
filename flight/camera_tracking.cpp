@@ -20,7 +20,8 @@ static bool findChessboards(vector<Mat> images, Size chessboardSize, vector<vect
 				images[i],
 				chessboardSize,
 				pointsOut[i],
-				CV_CALIB_CB_ADAPTIVE_THRESH);
+				0);
+				//CV_CALIB_CB_ADAPTIVE_THRESH);
 
 		if (!found) {
 			return false;
@@ -91,34 +92,60 @@ bool doExternalCalibrationInteractive(CameraData &cameras, Size chessboardSize, 
 {
 	int currCamera = 0;
 	int cameraCount = cameras.cameraCount;
+
 	bool inspecting = true;
+	bool success = false;
 
 	while (inspecting) {
 		captureCameraFrames(cameras.captures, cameras.frames);
 
-		cv::imshow("External Calibration", cameras.frames[currCamera]);
+		Mat display;
+
+		if (cameraCount == 2) {
+			cv::hconcat(cameras.frames[0], cameras.frames[1], display);
+		}
+		else {
+			display = cameras.frames[currCamera];
+		}
+
+		cv::imshow("External Calibration", display);
+
 		int pressedKey = cv::waitKey(1);
 
 		switch (pressedKey)
 		{
 			case 'n':
 			case ' ':
-				inspecting = false;
+			case '\r':
+				success = doExternalCalibration(cameras, chessboardSize, squareSize);
+
+				if (success) {
+					inspecting = false;
+				}
+				else {
+					std::cerr << "ERROR: External calibration failed." << std::endl;
+
+					display.setTo(Scalar{0, 0, 255});
+					cv::imshow("External Calibration", display);
+					cv::waitKey(100);
+				}
 				break;
 			case 'q':
-				exit(0);
+				success = false;
+				inspecting = false;
+				break;
 			case 'j':
 				currCamera = (currCamera + 1) % cameraCount;
 				break;
 			case 'k':
 				currCamera = (currCamera - 1 + cameraCount) % cameraCount;
 				break;
-
 		}
 	}
+
 	cv::destroyWindow("External Calibration");
 
-	return doExternalCalibration(cameras, chessboardSize, squareSize);
+	return success;
 }
 
 bool triangulateChessboardPoints(vector<Point3f> &points, CameraData &cameras, Size chessboardSize)
