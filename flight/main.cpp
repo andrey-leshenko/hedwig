@@ -67,7 +67,10 @@ Mat svdRotation(Mat &initialPointsCenteredMat, Mat &currPointsCenteredMat)
 
 	if (cv::determinant(rot) < 0)
 	{
-		rot.col(2) *= -1;
+		// Nick Lambert was wrong
+		Mat d = Mat::eye(3, 3, rot.type());
+		d.col(2) *= -1;
+		rot = vt.t() * d * u.t();
 	}
 
 	return rot;
