@@ -26,6 +26,7 @@ struct Config
 	int				cameraCount;
     vector<int>		cameraIndexes;
 	Mat				cameraMatrix;
+	int				cameraTargetFPS;
 
     Size			calibrationChessboardSize;
     float			calibrationChessboardSquareSize;

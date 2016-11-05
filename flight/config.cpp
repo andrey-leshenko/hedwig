@@ -5,14 +5,6 @@
 
 #include "config.hpp"
 
-using cv::FileStorage;
-using cv::String;
-using cv::FileNode;
-using cv::Affine3f;
-using cv::Affine3d;
-using cv::Vec4f;
-using cv::SVD;
-
 void printConfig(Config &cfg)
 {
 	std::cout << "camera_count: " << cfg.cameraCount << std::endl;
@@ -24,6 +16,7 @@ void printConfig(Config &cfg)
 	std::cout << std::endl;
 
 	std::cout << "camera_matrix: " << cfg.cameraMatrix << std::endl;
+	std::cout << "camera_target_fps: " << cfg.cameraTargetFPS << std::endl;
 
 	std::cout << "calibration_chessboard_size: " << cfg.calibrationChessboardSize << std::endl;
 	std::cout << "calibration_chessboard_square_size: " << cfg.calibrationChessboardSquareSize << std::endl;
@@ -83,6 +76,7 @@ bool loadConfigFromFile(Config &cfg, const char *file)
 
 	fs["camera_count"] >> cfg.cameraCount;
 	fs["camera_indexes"] >> cfg.cameraIndexes;
+	fs["camera_target_fps"] >> cfg.cameraTargetFPS;
 	fs["intrinsic_calibration_data"]["camera_matrix"] >> cfg.cameraMatrix;
 
 	fs["calibration_chessboard_size"] >> cfg.calibrationChessboardSize;

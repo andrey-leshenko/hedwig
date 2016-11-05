@@ -187,6 +187,7 @@ bool setupCameras(CameraData &cameras, Config &cfg)
 			std::cerr << "Couldn't open camera at index " << i << std::endl;
 			return false;
 		}
+		cameras.captures.back().set(cv::CAP_PROP_FPS, cfg.cameraTargetFPS);
 	}
 
 	cameras.cameraMatrixes.resize(cameras.cameraCount);
@@ -195,6 +196,55 @@ bool setupCameras(CameraData &cameras, Config &cfg)
 		cameras.cameraMatrixes[i] = cfg.cameraMatrix;
 	}
 
+	cameras.projectionMatrixes.resize(cameras.cameraCount);
+	cameras.transforms.resize(cameras.cameraCount);
+
+	for (int i = 0; i < cameras.cameraCount; i++) {
+		cameras.projectionMatrixes[i] = Mat::eye(3, 4, CV_64F);
+		cameras.transforms[i] = Affine3f{};
+	}
+
 	cameras.frames.resize(cameras.cameraCount);
 	cameras.imagePoints.resize(cameras.cameraCount);
+
+	return true;
+}
+
+void saveExternalCalibrationToFile(CameraData &cameras, const char *file)
+{
+	FileStorage fs(file, FileStorage::WRITE);
+
+	fs << "projection_matrixes" << "[";
+	for (Mat &m : cameras.projectionMatrixes) {
+		fs << m;
+	}
+	fs << "]";
+
+	fs << "transforms" << "[";
+	for (auto &t : cameras.transforms) {
+		fs << Mat{t.matrix};
+	}
+	fs << "]";
+}
+
+bool loadExternalCalibrationFromFile(CameraData &cameras, const char *file)
+{
+	FileStorage fs(file, FileStorage::READ);
+
+	if (!fs.isOpened())
+	{
+		return false;
+	}
+
+	fs["projection_matrixes"] >> cameras.projectionMatrixes;
+
+	vector<Mat> affineTransforms;
+	fs["transforms"] >> affineTransforms;
+
+	cameras.transforms.resize(cameras.cameraCount);
+	for (int i = 0; i < cameras.cameraCount; i++) {
+		cameras.transforms[i] = Affine3d{Affine3d::Mat4{affineTransforms[i]}};
+	}
+
+	return true;
 }

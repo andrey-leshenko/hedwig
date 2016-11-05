@@ -43,6 +43,8 @@ using cv::Point;
 using cv::Size;
 using cv::Range;
 
+using cv::FileStorage;
+using cv::FileNode;
 using cv::String;
 
 typedef int8_t s8;

@@ -20,3 +20,5 @@ bool doExternalCalibration(CameraData &cameras, Size chessboardSize, float squar
 bool doExternalCalibrationInteractive(CameraData &cameras, Size chessboardSize, float squareSize);
 bool setupCameras(CameraData &cameras, Config &cfg);
 bool triangulateChessboardPoints(vector<Point3f> &points, CameraData &cameras, Size chessboardSize);
+void saveExternalCalibrationToFile(CameraData &cameras, const char *file);
+bool loadExternalCalibrationFromFile(CameraData &cameras, const char *file);

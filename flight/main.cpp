@@ -76,45 +76,6 @@ Mat svdRotation(Mat &initialPointsCenteredMat, Mat &currPointsCenteredMat)
 	return rot;
 }
 
-void saveExternalCalibrationToFile(CameraData &cameras, const char *file)
-{
-	FileStorage fs(file, FileStorage::WRITE);
-
-	fs << "projection_matrixes" << "[";
-	for (Mat &m : cameras.projectionMatrixes) {
-		fs << m;
-	}
-	fs << "]";
-
-	fs << "transforms" << "[";
-	for (auto &t : cameras.transforms) {
-		fs << Mat{t.matrix};
-	}
-	fs << "]";
-}
-
-bool loadExternalCalibrationFromFile(CameraData &cameras, const char *file)
-{
-	FileStorage fs(file, FileStorage::READ);
-
-	if (!fs.isOpened())
-	{
-		return false;
-	}
-
-	fs["projection_matrixes"] >> cameras.projectionMatrixes;
-
-	vector<Mat> affineTransforms;
-	fs["transforms"] >> affineTransforms;
-
-	cameras.transforms.resize(cameras.cameraCount);
-	for (int i = 0; i < cameras.cameraCount; i++) {
-		cameras.transforms[i] = Affine3d{Affine3d::Mat4{affineTransforms[i]}};
-	}
-
-	return true;
-}
-
 Vec4f calculateControlErrors(Vec3f currPos, Mat currRotation, Vec3f targetPos)
 {
     float   yawError; // in radians
@@ -220,6 +181,44 @@ void vizUpdateKeyboardStateCallback(const cv::viz::KeyboardEvent &e, void* keybo
 	state->modifiers = e.modifiers;
 }
 
+static int connectToSerial(const vector<String> &possibleDevices)
+{
+	int serialfd = -1;
+
+	for (const String &s : possibleDevices) {
+		serialfd = arduino_serial_open(s.c_str(), 115200);
+		if (serialfd >= 0)
+			break;
+	}
+
+	return serialfd;
+}
+
+static int connectToSerialVerbose(const vector<String> &possibleDevices)
+{
+	int serialfd = connectToSerial(possibleDevices);
+
+	if (serialfd < 0)
+	{
+		printf("ERROR: couldn't connect to any of the serial devices specified.\n"
+				"Commands WILL NOT be sent.\n"
+				"\n"
+				"Make sure your device is connected.\n"
+				"\n"
+				"Devices checked:\n");
+		for (const String &s : possibleDevices) {
+			printf("    %s\n", s.c_str());
+		}
+		printf("\n"
+				"To add devices to this list, update the `possible_serial_devices` variable and recompile.\n"
+				"\n"
+				"press ENTER to continue");
+		getchar();
+	}
+
+	return serialfd;
+}
+
 int main(int argc, char *argv[])
 {
 	Config cfg;
@@ -235,60 +234,16 @@ int main(int argc, char *argv[])
 
 		std::cout << "Fetched the following config:" << std::endl;
 		printConfig(cfg);
+		std::cout << std::endl;
 	}
 
-	int serialfd = -1;
-
-	{
-		for (String &s : cfg.dronePossibleSerialDevices) {
-			serialfd = arduino_serial_open(s.c_str(), 115200);
-			if (serialfd >= 0)
-				break;
-		}
-
-		if (serialfd < 0)
-		{
-			printf("ERROR: couldn't connect to any of the serial devices specified.\n"
-					"Commands WILL NOT be sent.\n"
-					"\n"
-					"Make sure your device is connected.\n"
-					"\n"
-					"Devices checked:\n");
-			for (String &s : cfg.dronePossibleSerialDevices) {
-				printf("    %s\n", s.c_str());
-			}
-			printf("\n"
-					"To add devices to this list, update the `possible_serial_devices` variable and recompile.\n"
-					"\n"
-					"press ENTER to continue");
-			getchar();
-		}
-	}
+	int serialfd = connectToSerialVerbose(cfg.dronePossibleSerialDevices);
 
 	CameraData cameras;
-
 	setupCameras(cameras, cfg);
 
-	bool loadedExternalCalibration = false;
-
-	if (argc - 1 != 0) {
-		if (argv[1][0] == 'l' && argv[1][1] == 0) {
-			loadedExternalCalibration = loadExternalCalibrationFromFile(cameras, "external_calibration.yaml");
-		}
-		else {
-			std::cerr << "ERROR: Unkown arguments." << std::endl;
-			return -1;
-		}
-	}
-
-	if (!loadedExternalCalibration) {
-		bool ret = doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
-		if (!ret) {
-			std::cerr << "Error: Couldn't do external calibration" << std::endl;
-			return -1;
-		}
-		// XXX: Save only when requested
-		saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
+	if (loadExternalCalibrationFromFile(cameras, "external_calibration.yaml")) {
+		std::cout << "Successfully loaded external calibration." << std::endl;
 	}
 
 	vector<Point3f> initialPoints;
@@ -369,7 +324,6 @@ int main(int argc, char *argv[])
 			window.setWidgetPose("drone_direction", currTransform);
 		}
 
-
 		if (found) {
 			// NOTE(Andrey): Default Viz background
 			window.setBackgroundColor(cv::viz::Color{2, 1, 1}, cv::viz::Color{240, 120, 120});
@@ -380,6 +334,8 @@ int main(int argc, char *argv[])
 
 		if (keyboard.keyDown['c']) {
 			doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
+			addCamerasToViz(cameras, window);
+			saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
 		}
 
 		keyboardClearDownKeys(&keyboard);
