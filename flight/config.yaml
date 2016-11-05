@@ -7,8 +7,6 @@ camera_target_fps: 30
 calibration_chessboard_size: [7, 4]
 calibration_chessboard_square_size: 2.9
 
-extrinsic_calibration_data_path: "./extrinsic_calib.yaml"
-
 drone_chessboard_size: [5, 4]
 
 drone_possible_serial_devices:

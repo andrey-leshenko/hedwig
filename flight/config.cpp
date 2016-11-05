@@ -69,23 +69,42 @@ bool loadConfigFromFile(Config &cfg, const char *file)
 {
 	FileStorage fs(file, FileStorage::READ);
 
-	if (!fs.isOpened())
-	{
+	if (!fs.isOpened()) {
 		return false;
 	}
 
+	CV_Assert(fs["camera_count"].isInt());
 	fs["camera_count"] >> cfg.cameraCount;
+
+	CV_Assert(fs["camera_indexes"].isSeq());
+	CV_Assert(fs["camera_indexes"].size() == cfg.cameraCount);
 	fs["camera_indexes"] >> cfg.cameraIndexes;
+	CV_Assert(cfg.cameraIndexes.size() == cfg.cameraCount);
+
+	CV_Assert(fs["camera_target_fps"].isInt());
 	fs["camera_target_fps"] >> cfg.cameraTargetFPS;
+
+	CV_Assert(fs["intrinsic_calibration_data"]["camera_matrix"].isMap());
 	fs["intrinsic_calibration_data"]["camera_matrix"] >> cfg.cameraMatrix;
 
+	CV_Assert(fs["calibration_chessboard_size"].isSeq());
+	CV_Assert(fs["calibration_chessboard_size"].size() == 2);
 	fs["calibration_chessboard_size"] >> cfg.calibrationChessboardSize;
+
+	CV_Assert(fs["calibration_chessboard_square_size"].isReal());
 	fs["calibration_chessboard_square_size"] >> cfg.calibrationChessboardSquareSize;
 
+	CV_Assert(fs["drone_chessboard_size"].isSeq());
+	CV_Assert(fs["drone_chessboard_size"].size() == 2);
 	fs["drone_chessboard_size"] >> cfg.droneChessboardSize;
+
+	CV_Assert(fs["calibration_chessboard_size"].isSeq());
 	fs["drone_possible_serial_devices"] >> cfg.dronePossibleSerialDevices;
 
 	const char *axes[4] = {"right", "forward", "up", "clockwise"};
+
+	CV_Assert(fs["drone_channel_bounds"].isMap());
+	CV_Assert(fs["drone_pid_parameters"].isMap());
 
 	for (int i = 0; i < 4; i++) {
 		const char *axis = axes[i];
@@ -95,8 +114,6 @@ bool loadConfigFromFile(Config &cfg, const char *file)
 		readChannelBoundsFromFile(cfg.droneChannels[i], fnChannel);
 		readPIDPatametersFromFile(cfg.dronePIDParameters[i], fnPID);
 	}
-
-	// TODO(Andrey): Verify the config file is correct
 
 	return true;
 }
