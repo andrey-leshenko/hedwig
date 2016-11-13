@@ -1,6 +1,6 @@
 #include "camera_tracking.hpp"
 
-#include "chessboard.hpp"
+#include "instatrack/instatrack.hpp"
 
 static void captureCameraFrames(vector<VideoCapture>& cameras, vector<Mat>& frames)
 {
@@ -15,8 +15,7 @@ static void captureCameraFrames(vector<VideoCapture>& cameras, vector<Mat>& fram
 static bool findChessboards(vector<Mat> images, Size chessboardSize, vector<vector<Point2f>>& pointsOut)
 {
 	for (int i = 0; i < images.size(); i++) {
-		// Our brand new chessboard detection algorithm
-		bool found = findChessboardSquares(
+		bool found = instatrackFindChessboard(
 				images[i],
 				chessboardSize,
 				pointsOut[i],
