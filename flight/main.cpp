@@ -8,6 +8,34 @@
 
 using cv::FileStorage;
 
+std::string type2str(int type) {
+	std::string r;
+
+	uchar depth = type & CV_MAT_DEPTH_MASK;
+	uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+	switch ( depth ) {
+		case CV_8U: r = "8U"; break;
+		case CV_8S: r = "8S"; break;
+		case CV_16U: r = "16U"; break;
+		case CV_16S: r = "16S"; break;
+		case CV_32S: r = "32S"; break;
+		case CV_32F: r = "32F"; break;
+		case CV_64F: r = "64F"; break;
+		default: r = "User"; break;
+	}
+
+	r += "C";
+	r += (chans+'0');
+
+	return r;
+}
+
+bool pointInImage(Point2d p, int xFloor = 0, int xCeiling = 650, int yFloor = 0, int yCeiling = 500)
+{
+	return (xFloor <= p.x) && (p.x <= xCeiling) && (yFloor <= p.y) && (p.y <= yCeiling);
+}
+
 Point3f centroid(const vector<Point3f>& points)
 {
 	Vec3f sum;
@@ -78,45 +106,45 @@ Mat svdRotation(Mat &initialPointsCenteredMat, Mat &currPointsCenteredMat)
 
 Vec4f calculateControlErrors(Vec3f currPos, Mat currRotation, Vec3f targetPos)
 {
-    float   yawError; // in radians
-    Vec2f   currPosCenteredProj,
-            targetPosCenteredProj;
-    Vec4f   posError;
+		float	yawError; // in radians
+		Vec2f	currPosCenteredProj,
+				targetPosCenteredProj;
+		Vec4f	posError;
 
-	// TODO: Find the yaw from the forward vector
+		// TODO: Find the yaw from the forward vector
 
-    float r31 = currRotation.at<float>(2, 0);
-    float r32 = currRotation.at<float>(2, 1);
-    float r33 = currRotation.at<float>(2, 2);
+		float r31 = currRotation.at<float>(2, 0);
+		float r32 = currRotation.at<float>(2, 1);
+		float r33 = currRotation.at<float>(2, 2);
 
-    yawError = atan2(-r31, sqrt(r32 * r32 + r33 * r33));
+		yawError = atan2(-r31, sqrt(r32 * r32 + r33 * r33));
 
-    Mat yRotation = (cv::Mat_<float>(3,3) <<
-                        cos(yawError) , 0       , sin(yawError),
-                        0             , 1       , 0            ,
-                        -sin(yawError), 0       , cos(yawError));
+		Mat yRotation = (cv::Mat_<float>(3,3) <<
+				cos(yawError) , 0, sin(yawError),
+				0, 1, 0,
+				-sin(yawError), 0, cos(yawError));
 
-    yRotation = yRotation.inv();
-    posError[1] = targetPos[1] - currPos[1];
-    posError[3] = yawError;
+		yRotation = yRotation.inv();
+		posError[1] = targetPos[1] - currPos[1];
+		posError[3] = yawError;
 
-    Mat targetPosRotated = yRotation * Mat(targetPos);
-    Mat currPosRotated = yRotation * Mat(currPos);
+		Mat targetPosRotated = yRotation * Mat(targetPos);
+		Mat currPosRotated = yRotation * Mat(currPos);
 
-    currPosCenteredProj =   {  currPosRotated.at<float>(0,0) ,
-                                    currPosRotated.at<float>(2,0) };
-    targetPosCenteredProj = {  targetPosRotated.at<float>(0,0) ,
-                                    targetPosRotated.at<float>(2,0) };
+		currPosCenteredProj = { currPosRotated.at<float>(0,0),
+			currPosRotated.at<float>(2,0) };
+		targetPosCenteredProj = { targetPosRotated.at<float>(0,0),
+			targetPosRotated.at<float>(2,0) };
 
-    targetPosCenteredProj -= currPosCenteredProj;
-    currPosCenteredProj -= currPosCenteredProj;
+		targetPosCenteredProj -= currPosCenteredProj;
+		currPosCenteredProj -= currPosCenteredProj;
 
-    posError[0] = targetPosCenteredProj[0] - currPosCenteredProj[0];
-    posError[2] = targetPosCenteredProj[1] - currPosCenteredProj[1];
+		posError[0] = targetPosCenteredProj[0] - currPosCenteredProj[0];
+		posError[2] = targetPosCenteredProj[1] - currPosCenteredProj[1];
 
 	Vec4f finalError{posError[0], -posError[2], posError[1], yawError};
 
-    return finalError;
+	return finalError;
 }
 
 int lerp(float t, int a, int b)
@@ -138,9 +166,9 @@ int transformIntoChannel(float normalizedValue, ChannelBounds bounds)
 int sendToDrone(int serialfd, int channels[4])
 {
 	for (int i = 0; i < 4; i++) {
-		std::cout << channels[i] << " ";
+//		std::cout << channels[i] << " ";
 	}
-	std::cout << std::endl;
+//	std::cout << std::endl;
 
 	if (serialfd < 0) {
 		return -1;
@@ -207,7 +235,7 @@ static int connectToSerialVerbose(const vector<String> &possibleDevices)
 				"\n"
 				"Devices checked:\n");
 		for (const String &s : possibleDevices) {
-			printf("    %s\n", s.c_str());
+			printf("		%s\n", s.c_str());
 		}
 		printf("\n"
 				"To add devices to this list, update the `possible_serial_devices` variable and recompile.\n"
@@ -242,6 +270,12 @@ int main(int argc, char *argv[])
 	CameraData cameras;
 	setupCameras(cameras, cfg);
 
+
+	if (argc > 1)
+	{
+		doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
+		saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
+	}
 	if (loadExternalCalibrationFromFile(cameras, "external_calibration.yaml")) {
 		std::cout << "Successfully loaded external calibration." << std::endl;
 	}
@@ -267,10 +301,86 @@ int main(int argc, char *argv[])
 	window.registerKeyboardCallback(&vizUpdateKeyboardStateCallback, &keyboard);
 
 	addCamerasToViz(cameras, window);
+	window.showWidget("floor", cv::viz::WPlane{Point3d{0, 0, 0}, Vec3d{0, 1, 0}, Vec3d{1, 0, 0}, cv::Size2d{20,20}, cv::viz::Color::silver()});
 	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
 	window.showWidget("drone", cv::viz::WCube{Point3f{-10, -2, -10}, Point3f{10, 2, 10}, true});
 	window.showWidget("drone_direction", cv::viz::WArrow{Point3f{0, 0, 0}, Point3f{0, 0, -20}});
 
+	float edge[3] = {100, 100, 100};
+	float shift[3] = {-50, -50, -50};
+	int density[3] = {10, 10, 10};
+
+	Mat homoSamplingCluster{4, density[0] * density[1] * density[2], CV_64F};
+	int col = 0;
+	for(int i = 0; i < density[0]; i++)
+		for(int j = 0; j < density[1]; j++)
+			for(int k = 0; k < density[2]; k++)
+			{
+				homoSamplingCluster.at<double>(0, col) = (edge[0] / density[0]) * i + shift[0];
+				homoSamplingCluster.at<double>(1, col) = (edge[1] / density[1]) * j + shift[1];
+				homoSamplingCluster.at<double>(2, col) = (edge[2] / density[2]) * k + shift[2];
+				homoSamplingCluster.at<double>(3, col) = 1;
+				col++;
+			}
+
+//	std::cout << homoSamplingCluster << std::endl;
+
+	vector<Mat> homoImageCluster;
+
+	for(vector<Mat>::iterator projIter = cameras.projectionMatrixes.begin(); projIter != cameras.projectionMatrixes.end(); ++projIter)
+	{
+		homoImageCluster.push_back((*projIter) * homoSamplingCluster);
+	}
+
+//	for(vector<Mat>::iterator it = homoImageCluster.begin(); it != homoImageCluster.end(); ++it)
+//		std::cout << (*it) << std::endl;
+
+	vector<Mat> imageCluster;
+
+	for(vector<Mat>::iterator homoIter = homoImageCluster.begin(); homoIter != homoImageCluster.end(); ++homoIter)
+	{
+		Mat temp{};
+		convertPointsFromHomogeneous((*homoIter).t(), temp);
+		imageCluster.push_back(temp);
+	}
+
+//	for(vector<Mat>::iterator it = imageCluster.begin(); it != imageCluster.end(); ++it)
+//		std::cout << (*it) << std::endl;
+
+	vector<bool> inImage(density[0] * density[1] * density[2], true);
+
+//	for(vector<bool>::iterator it = inImage.begin(); it != inImage.end(); ++it)
+//		std::cout << (*it) << std::endl;
+
+	for(vector<Mat>::iterator it = imageCluster.begin(); it != imageCluster.end(); ++it)
+	{
+		vector<bool>::iterator boolIt = inImage.begin();
+		for(int i = 0; i < density[0] * density[1] * density[2]; i++, ++boolIt)
+		{
+			(*boolIt) = (*boolIt) & pointInImage(Point2d{(*it).at<double>(i, 0), (*it).at<double>(i, 1)});
+		}
+	}
+
+//	for(vector<bool>::iterator it = inImage.begin(); it != inImage.end(); ++it)
+//		std::cout << (*it) << std::endl;
+
+	vector<Point3d> displayCluster;
+
+	int iter = 0;
+	for(vector<bool>::iterator boolIt = inImage.begin(); boolIt != inImage.end(); ++boolIt, iter++)
+		if(*boolIt)
+		{
+			displayCluster.push_back(Point3d{
+			homoSamplingCluster.at<double>(0, iter),
+			homoSamplingCluster.at<double>(1, iter),
+			homoSamplingCluster.at<double>(2, iter)});
+		}
+
+//	for(vector<Point3d>::iterator it = displayCluster.begin(); it != displayCluster.end(); ++it)
+//		std::cout << (*it) << std::endl;
+
+	window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+//XXX
 	ChannelBounds channels[4];
 	Pid pids[4];
 	s64 lastFrameTickCount = cv::getTickCount();
@@ -310,7 +420,7 @@ int main(int argc, char *argv[])
 			}
 
 			int sentValues[4];
-			
+
 			for (int i = 0; i < 4; i++) {
 				sentValues[i] = transformIntoChannel(pidedErrors[i], channels[i]);
 			}
