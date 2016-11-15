@@ -85,8 +85,17 @@ void addCamerasToViz(CameraData &cameras, cv::viz::Viz3d &window)
 	}
 }
 
-Mat svdRotation(Mat &initialPointsCenteredMat, Mat &currPointsCenteredMat)
+Mat kabtschSVDRotation(const vector<Point3f> initialPoints, const vector<Point3f> currPoints)
 {
+	Point3f initialPosition = centroid(initialPoints);
+
+	vector<Point3f> initialPointsCentered = pointsTranslate(initialPoints, -initialPosition);
+	Mat initialPointsCenteredMat = createPointMatrix(initialPointsCentered);
+
+	Point3f currPosition = centroid(currPoints);
+	vector<Point3f> currPointsCentered = pointsTranslate(currPoints, -currPosition);
+	Mat currPointsCenteredMat = createPointMatrix(currPointsCentered);
+
 	Mat covarianceMatrix{initialPointsCenteredMat * currPointsCenteredMat.t()};
 	Mat u, s, vt;
 
@@ -364,35 +373,32 @@ int main(int argc, char *argv[])
 	CameraData cameras;
 	setupCameras(cameras, cfg);
 
-	if (argc > 1)
-	{
-		doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
-		saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
-	}
 	if (loadExternalCalibrationFromFile(cameras, "external_calibration.yaml")) {
 		std::cout << "Successfully loaded external calibration." << std::endl;
 	}
-
-	vector<Point3f> initialPoints;
-
-	while (!triangulateChessboardPoints(initialPoints, cameras, cfg.droneChessboardSize)) {
-		std::cout << "Couldn't find drone, retrying..." << std::endl;
+	else {
+		doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
+		saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
 	}
 
-	Point3f initialPosition = centroid(initialPoints);
-	vector<Point3f> initialPointsCentered = pointsTranslate(initialPoints, -initialPosition);
-	Mat initialPointsCenteredMat = createPointMatrix(initialPointsCentered);
-
+	vector<Point3f> initialPoints;
 	vector<Point3f> currPoints;
-	Point3f currPosition;
-	vector<Point3f> currPointsCentered;
-	Mat currPointsCenteredMat;
+
+	if (false) {
+		std::cout << "Successully loaded drone point data." << std::endl;
+	}
+	else {
+		std::cout << "Position the drone facing the -Z axis and press ENTER" << std::flush;
+		getchar();
+		while (!triangulateChessboardPoints(initialPoints, cameras, cfg.droneChessboardSize)) {
+			std::cout << "Couldn't find drone, retrying..." << std::endl;
+		}
+	}
 
 	cv::viz::Viz3d window{"Flight Control"};
 
 	KeyboardState keyboard = {0};
 	window.registerKeyboardCallback(&vizUpdateKeyboardStateCallback, &keyboard);
-
 
 	addCamerasToViz(cameras, window);
 	window.showWidget("floor", cv::viz::WPlane{Point3d{0, 0, 0}, Vec3d{0, 1, 0}, Vec3d{1, 0, 0}, cv::Size2d{20,20}, cv::viz::Color::silver()});
@@ -401,7 +407,8 @@ int main(int argc, char *argv[])
 	window.showWidget("drone_direction", cv::viz::WArrow{Point3f{0, 0, 0}, Point3f{0, 0, -20}});
 	vector<Point3d> displayCluster;
 	displayCamerasRange(cameras, displayCluster);
-	//window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+	window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+
 	ChannelBounds channels[4];
 	Pid pids[4];
 	s64 lastFrameTickCount = cv::getTickCount();
@@ -417,19 +424,12 @@ int main(int argc, char *argv[])
 	while (!window.wasStopped()) {
 		bool found = triangulateChessboardPoints(currPoints, cameras, cfg.droneChessboardSize);
 
-		if (found)
+		if (found && initialPoints.size() == currPoints.size())
 		{
-			currPosition = centroid(currPoints);
-			currPointsCentered = pointsTranslate(currPoints, -currPosition);
-			currPointsCenteredMat = createPointMatrix(currPointsCentered);
-
-			Vec3f pos = Vec3f{currPosition} - Vec3f{initialPosition};
-			Mat rot = svdRotation(initialPointsCenteredMat, currPointsCenteredMat);
-
-			Affine3f currTransform {rot, pos};
+			Vec3f pos = centroid(currPoints);
+			Mat rot = kabtschSVDRotation(initialPoints, currPoints);
 
 			Vec3f target = {0, 0, 0};
-
 			Vec4f controlErrors = calculateControlErrors(pos, rot, target);
 
 			Vec4f pidedErrors;
@@ -446,27 +446,37 @@ int main(int argc, char *argv[])
 				sentValues[i] = transformIntoChannel(pidedErrors[i], channels[i]);
 			}
 
-			sendToDrone(serialfd, sentValues);
+			if (serialfd >= 0) {
+				sendToDrone(serialfd, sentValues);
+			}
 
-			window.showWidget("chessboard", cv::viz::WCloud{currPoints});
-			window.setRenderingProperty("chessboard", cv::viz::POINT_SIZE, 4);
+			{
+				Affine3f currTransform {rot, pos};
+				window.showWidget("chessboard", cv::viz::WCloud{currPoints});
+				window.setRenderingProperty("chessboard", cv::viz::POINT_SIZE, 4);
 
-			window.setWidgetPose("drone", currTransform);
-			window.setWidgetPose("drone_direction", currTransform);
+				window.setWidgetPose("drone", currTransform);
+				window.setWidgetPose("drone_direction", currTransform);
+			}
 		}
 
-		if (found) {
-			// NOTE(Andrey): Default Viz background
-			window.setBackgroundColor(cv::viz::Color{2, 1, 1}, cv::viz::Color{240, 120, 120});
+		if (!found) {
+			window.setBackgroundColor(cv::viz::Color{35, 35, 255}, cv::viz::Color{0, 0, 255});
 		}
 		else {
-			window.setBackgroundColor(cv::viz::Color{35, 35, 255}, cv::viz::Color{0, 0, 255});
+			// NOTE(Andrey): Default Viz background
+			window.setBackgroundColor(cv::viz::Color{2, 1, 1}, cv::viz::Color{240, 120, 120});
 		}
 
 		if (keyboard.keyDown['c']) {
 			doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
 			addCamerasToViz(cameras, window);
 			saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
+		}
+		if (keyboard.keyDown['d']) {
+			while (!triangulateChessboardPoints(initialPoints, cameras, cfg.droneChessboardSize)) {
+				std::cout << "Couldn't find drone, retrying..." << std::endl;
+			}
 		}
 
 		keyboardClearDownKeys(&keyboard);
