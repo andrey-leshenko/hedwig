@@ -106,52 +106,62 @@ Mat svdRotation(Mat &initialPointsCenteredMat, Mat &currPointsCenteredMat)
 
 Vec4f calculateControlErrors(Vec3f currPos, Mat currRotation, Vec3f targetPos)
 {
-		float	yawError; // in radians
-		Vec2f	currPosCenteredProj,
-				targetPosCenteredProj;
-		Vec4f	posError;
+	// The world axes are (from above):
+	//
+	// *-----> X
+	// |
+	// |
+	// V
+	// Z
+	//
+	// atan2 expects:
+	//
+	// Y
+	// ^
+	// |
+	// |
+	// *-----> X
+	//
+	// Also, atan2 calculates rotation angle relative to X
+	// while we want it relative to Z (-Z is forward).
+	// So Z becomes the new X, and X becomes the new Y.
 
-		// TODO: Find the yaw from the forward vector
+	float zx = currRotation.at<float>(0, 2);
+	float zz = currRotation.at<float>(2, 2);
+	float atanY = zx;
+	float atanX = zz;
 
-		float r31 = currRotation.at<float>(2, 0);
-		float r32 = currRotation.at<float>(2, 1);
-		float r33 = currRotation.at<float>(2, 2);
+	float yawCCW = std::atan2(atanY, atanX);
 
-		yawError = atan2(-r31, sqrt(r32 * r32 + r33 * r33));
+	Mat yawRotation = (cv::Mat_<float>(3,3) <<
+			cos(yawCCW),  0, sin(yawCCW),
+			0,            1, 0,
+			-sin(yawCCW), 0, cos(yawCCW));
 
-		Mat yRotation = (cv::Mat_<float>(3,3) <<
-				cos(yawError) , 0, sin(yawError),
-				0, 1, 0,
-				-sin(yawError), 0, cos(yawError));
+	auto rotatePoint3f = [](Point3f p, const Mat& m) {
+		Mat mp{p, false};
+		mp = m * mp;
+		return p;
+	};
 
-		yRotation = yRotation.inv();
-		posError[1] = targetPos[1] - currPos[1];
-		posError[3] = yawError;
+	Point3f droneWorldForward{0, 0, -1};
+	Point3f droneWorldRight{1, 0, 0};
+	Point3f droneWorldUp{0, 1, 0};
 
-		Mat targetPosRotated = yRotation * Mat(targetPos);
-		Mat currPosRotated = yRotation * Mat(currPos);
+	droneWorldForward = rotatePoint3f(droneWorldForward, yawRotation);
+	droneWorldRight = rotatePoint3f(droneWorldRight, yawRotation);
+	droneWorldUp = rotatePoint3f(droneWorldUp, yawRotation);
 
-		currPosCenteredProj = { currPosRotated.at<float>(0,0),
-			currPosRotated.at<float>(2,0) };
-		targetPosCenteredProj = { targetPosRotated.at<float>(0,0),
-			targetPosRotated.at<float>(2,0) };
+	Point3f target = targetPos - currPos;
 
-		targetPosCenteredProj -= currPosCenteredProj;
-		currPosCenteredProj -= currPosCenteredProj;
+	Vec4f errors {
+		target.dot(droneWorldRight),
+		target.dot(droneWorldForward),
+		target.dot(droneWorldUp),
+		-yawCCW
+	};
 
-		posError[0] = targetPosCenteredProj[0] - currPosCenteredProj[0];
-		posError[2] = targetPosCenteredProj[1] - currPosCenteredProj[1];
-
-		Vec4f finalError{posError[0], -posError[2], posError[1], yawError};
-		float pitch = atan2(currRotation.at<float>(2, 1), currRotation.at<float>(2, 2));
-		float roll = atan2(-(currRotation.at<float>(2, 0)), sqrt(std::pow(currRotation.at<float>(2, 1), 2) + std::pow(currRotation.at<float>(2, 2), 2)));
-		float yaw = atan2(currRotation.at<float>(1, 0), currRotation.at<float>(0, 0));
-		pitch = 180 * pitch / 3.14;
-		roll = 180 * roll / 3.14;
-		yaw = 180 * yaw / 3.14;
-		std::cout << pitch << " , " << roll << " , " << yaw << std::endl;
-
-	return finalError;
+	return errors;
 }
 
 int lerp(float t, int a, int b)
@@ -391,7 +401,7 @@ int main(int argc, char *argv[])
 	window.showWidget("drone_direction", cv::viz::WArrow{Point3f{0, 0, 0}, Point3f{0, 0, -20}});
 	vector<Point3d> displayCluster;
 	displayCamerasRange(cameras, displayCluster);
-	window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+	//window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
 	ChannelBounds channels[4];
 	Pid pids[4];
 	s64 lastFrameTickCount = cv::getTickCount();
