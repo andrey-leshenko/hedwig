@@ -266,8 +266,8 @@ static int connectToSerialVerbose(const vector<String> &possibleDevices)
 
 void displayCamerasRange(CameraData &cameras, vector<Point3d> &displayCluster) {
 
-	float edge[3] = {180, 180, 180};
-	float shift[3] = {-50, 0, -110};
+	float edge[3] = {220, 180, 220};
+	float shift[3] = {-140, 0, -110};
 	int density[3] = {20, 20, 20};
 
 	Mat homoSamplingCluster{4, density[0] * density[1] * density[2], CV_64F};
@@ -401,7 +401,17 @@ int main(int argc, char *argv[])
 	window.showWidget("drone_direction", cv::viz::WArrow{Point3f{0, 0, 0}, Point3f{0, 0, -20}});
 	vector<Point3d> displayCluster;
 	displayCamerasRange(cameras, displayCluster);
+<<<<<<< Updated upstream
 	//window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+=======
+	window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+
+	Vec3f target = {20, 20, 20};
+	window.showWidget("target_point", cv::viz::WSphere{Point3f{target}, 3, 10, cv::viz::Color::violet()});
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
 	ChannelBounds channels[4];
 	Pid pids[4];
 	s64 lastFrameTickCount = cv::getTickCount();
@@ -428,8 +438,6 @@ int main(int argc, char *argv[])
 
 			Affine3f currTransform {rot, pos};
 
-			Vec3f target = {0, 0, 0};
-
 			Vec4f controlErrors = calculateControlErrors(pos, rot, target);
 
 			Vec4f pidedErrors;
@@ -448,6 +456,12 @@ int main(int argc, char *argv[])
 
 			sendToDrone(serialfd, sentValues);
 
+			Point3f pidViz;
+			pidViz.x = lerp(pidedErrors[0], 0, 40) + target[0];
+			pidViz.y = lerp(pidedErrors[1], 0, 40) + target[1];
+			pidViz.z = lerp(pidedErrors[2], 0, 40) + target[2];
+
+			window.showWidget("pid_arrow", cv::viz::WArrow{Point3f{target}, pidViz, 0.03, cv::viz::Color::cherry()});
 			window.showWidget("chessboard", cv::viz::WCloud{currPoints});
 			window.setRenderingProperty("chessboard", cv::viz::POINT_SIZE, 4);
 

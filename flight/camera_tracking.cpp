@@ -50,6 +50,7 @@ bool doExternalCalibration(CameraData &cameras, Size chessboardSize, float squar
 	captureCameraFrames(cameras.captures, cameras.frames);
 
 	if (!findChessboards(cameras.frames, chessboardSize, cameras.imagePoints)) {
+		std::cout << "Cannot find Chessboards corners" << std::endl;
 		return false;
 	}
 
@@ -68,10 +69,11 @@ bool doExternalCalibration(CameraData &cameras, Size chessboardSize, float squar
 				tvecs[i]);
 
 		if (!found) {
+			std::cout << "Cannot find pnp" << std::endl;
 			return false;
 		}
 	}
-	
+
 	for (int i = 0; i < cameras.frames.size(); i++) {
 		Affine3d transform{rvecs[i], tvecs[i]};
 		Mat rtMatrix = Mat{transform.matrix}.rowRange(0, 3);

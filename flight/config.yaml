@@ -1,28 +1,29 @@
 %YAML:1.0
 
 camera_count: 2
-camera_indexes: [0, 1]
+camera_indexes: [1, 2]
 camera_target_fps: 30
 
-calibration_chessboard_size: [7, 4]
-calibration_chessboard_square_size: 2.9
+% size format: square count (and not corner format)
+calibration_chessboard_size: [8, 5]
+calibration_chessboard_square_size: 7.5
 
-drone_chessboard_size: [5, 4]
+drone_chessboard_size: [4, 3]
 
 drone_possible_serial_devices:
     - "/dev/ttyACM0"
     - "/dev/ttyACM1"
 
 drone_channel_bounds:
-    right:     [127, 64, 0]
-    forward:   [0, 64, 127]
-    up:        [10, 30, 60]
-    clockwise: [127, 64, 0]
+    right:     [127, 63, 0]
+    forward:   [0, 61, 127]
+    up:        [20, 40, 60]
+    clockwise: [127, 63, 0]
 
 drone_pid_parameters:
-    right:     {kp: 0.01, ki: 0, kd: 0}
-    forward:   {kp: 0.01, ki: 0, kd: 0}
-    up:        {kp: 0.01, ki: 0, kd: 0}
+    right:     {kp: 0.02, ki: 0, kd: 0}
+    forward:   {kp: 0.02, ki: 0, kd: 0}
+    up:        {kp: 0.02, ki: 0, kd: 0}
     clockwise: {kp: 0.3, ki: 0, kd: 0}
 
 intrinsic_calibration_data:
