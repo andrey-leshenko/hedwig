@@ -142,7 +142,14 @@ Vec4f calculateControlErrors(Vec3f currPos, Mat currRotation, Vec3f targetPos)
 		posError[0] = targetPosCenteredProj[0] - currPosCenteredProj[0];
 		posError[2] = targetPosCenteredProj[1] - currPosCenteredProj[1];
 
-	Vec4f finalError{posError[0], -posError[2], posError[1], yawError};
+		Vec4f finalError{posError[0], -posError[2], posError[1], yawError};
+		float pitch = atan2(currRotation.at<float>(2, 1), currRotation.at<float>(2, 2));
+		float roll = atan2(-(currRotation.at<float>(2, 0)), sqrt(std::pow(currRotation.at<float>(2, 1), 2) + std::pow(currRotation.at<float>(2, 2), 2)));
+		float yaw = atan2(currRotation.at<float>(1, 0), currRotation.at<float>(0, 0));
+		pitch = 180 * pitch / 3.14;
+		roll = 180 * roll / 3.14;
+		yaw = 180 * yaw / 3.14;
+		std::cout << pitch << " , " << roll << " , " << yaw << std::endl;
 
 	return finalError;
 }
@@ -247,68 +254,11 @@ static int connectToSerialVerbose(const vector<String> &possibleDevices)
 	return serialfd;
 }
 
-int main(int argc, char *argv[])
-{
-	Config cfg;
+void displayCamerasRange(CameraData &cameras, vector<Point3d> &displayCluster) {
 
-	{
-		auto file = "../config.yaml";
-
-		bool success = loadConfigFromFile(cfg, file);
-		if (!success) {
-			std::cerr << "ERROR: Couldn't read config file `" << file << "`." << std::endl;
-			return 1;
-		}
-
-		std::cout << "Fetched the following config:" << std::endl;
-		printConfig(cfg);
-		std::cout << std::endl;
-	}
-
-	int serialfd = connectToSerialVerbose(cfg.dronePossibleSerialDevices);
-
-	CameraData cameras;
-	setupCameras(cameras, cfg);
-
-
-	if (argc > 1)
-	{
-		doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
-		saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
-	}
-	if (loadExternalCalibrationFromFile(cameras, "external_calibration.yaml")) {
-		std::cout << "Successfully loaded external calibration." << std::endl;
-	}
-
-	vector<Point3f> initialPoints;
-
-	while (!triangulateChessboardPoints(initialPoints, cameras, cfg.droneChessboardSize)) {
-		std::cout << "Couldn't find drone, retrying..." << std::endl;
-	}
-
-	Point3f initialPosition = centroid(initialPoints);
-	vector<Point3f> initialPointsCentered = pointsTranslate(initialPoints, -initialPosition);
-	Mat initialPointsCenteredMat = createPointMatrix(initialPointsCentered);
-
-	vector<Point3f> currPoints;
-	Point3f currPosition;
-	vector<Point3f> currPointsCentered;
-	Mat currPointsCenteredMat;
-
-	cv::viz::Viz3d window{"Flight Control"};
-
-	KeyboardState keyboard = {0};
-	window.registerKeyboardCallback(&vizUpdateKeyboardStateCallback, &keyboard);
-
-	addCamerasToViz(cameras, window);
-	window.showWidget("floor", cv::viz::WPlane{Point3d{0, 0, 0}, Vec3d{0, 1, 0}, Vec3d{1, 0, 0}, cv::Size2d{20,20}, cv::viz::Color::silver()});
-	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
-	window.showWidget("drone", cv::viz::WCube{Point3f{-10, -2, -10}, Point3f{10, 2, 10}, true});
-	window.showWidget("drone_direction", cv::viz::WArrow{Point3f{0, 0, 0}, Point3f{0, 0, -20}});
-
-	float edge[3] = {100, 100, 100};
-	float shift[3] = {-50, -50, -50};
-	int density[3] = {10, 10, 10};
+	float edge[3] = {180, 180, 180};
+	float shift[3] = {-50, 0, -110};
+	int density[3] = {20, 20, 20};
 
 	Mat homoSamplingCluster{4, density[0] * density[1] * density[2], CV_64F};
 	int col = 0;
@@ -364,7 +314,6 @@ int main(int argc, char *argv[])
 //	for(vector<bool>::iterator it = inImage.begin(); it != inImage.end(); ++it)
 //		std::cout << (*it) << std::endl;
 
-	vector<Point3d> displayCluster;
 
 	int iter = 0;
 	for(vector<bool>::iterator boolIt = inImage.begin(); boolIt != inImage.end(); ++boolIt, iter++)
@@ -379,8 +328,70 @@ int main(int argc, char *argv[])
 //	for(vector<Point3d>::iterator it = displayCluster.begin(); it != displayCluster.end(); ++it)
 //		std::cout << (*it) << std::endl;
 
+
+}
+
+int main(int argc, char *argv[])
+{
+	Config cfg;
+
+	{
+		auto file = "../config.yaml";
+
+		bool success = loadConfigFromFile(cfg, file);
+		if (!success) {
+			std::cerr << "ERROR: Couldn't read config file `" << file << "`." << std::endl;
+			return 1;
+		}
+
+		std::cout << "Fetched the following config:" << std::endl;
+		printConfig(cfg);
+		std::cout << std::endl;
+	}
+
+	int serialfd = connectToSerialVerbose(cfg.dronePossibleSerialDevices);
+
+	CameraData cameras;
+	setupCameras(cameras, cfg);
+
+	if (argc > 1)
+	{
+		doExternalCalibrationInteractive(cameras, cfg.calibrationChessboardSize, cfg.calibrationChessboardSquareSize);
+		saveExternalCalibrationToFile(cameras, "external_calibration.yaml");
+	}
+	if (loadExternalCalibrationFromFile(cameras, "external_calibration.yaml")) {
+		std::cout << "Successfully loaded external calibration." << std::endl;
+	}
+
+	vector<Point3f> initialPoints;
+
+	while (!triangulateChessboardPoints(initialPoints, cameras, cfg.droneChessboardSize)) {
+		std::cout << "Couldn't find drone, retrying..." << std::endl;
+	}
+
+	Point3f initialPosition = centroid(initialPoints);
+	vector<Point3f> initialPointsCentered = pointsTranslate(initialPoints, -initialPosition);
+	Mat initialPointsCenteredMat = createPointMatrix(initialPointsCentered);
+
+	vector<Point3f> currPoints;
+	Point3f currPosition;
+	vector<Point3f> currPointsCentered;
+	Mat currPointsCenteredMat;
+
+	cv::viz::Viz3d window{"Flight Control"};
+
+	KeyboardState keyboard = {0};
+	window.registerKeyboardCallback(&vizUpdateKeyboardStateCallback, &keyboard);
+
+
+	addCamerasToViz(cameras, window);
+	window.showWidget("floor", cv::viz::WPlane{Point3d{0, 0, 0}, Vec3d{0, 1, 0}, Vec3d{1, 0, 0}, cv::Size2d{20,20}, cv::viz::Color::silver()});
+	window.showWidget("axes", cv::viz::WCoordinateSystem{20});
+	window.showWidget("drone", cv::viz::WCube{Point3f{-10, -2, -10}, Point3f{10, 2, 10}, true});
+	window.showWidget("drone_direction", cv::viz::WArrow{Point3f{0, 0, 0}, Point3f{0, 0, -20}});
+	vector<Point3d> displayCluster;
+	displayCamerasRange(cameras, displayCluster);
 	window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
-//XXX
 	ChannelBounds channels[4];
 	Pid pids[4];
 	s64 lastFrameTickCount = cv::getTickCount();
@@ -407,7 +418,7 @@ int main(int argc, char *argv[])
 
 			Affine3f currTransform {rot, pos};
 
-			Vec3f target = {0, 50, 0};
+			Vec3f target = {0, 0, 0};
 
 			Vec4f controlErrors = calculateControlErrors(pos, rot, target);
 
