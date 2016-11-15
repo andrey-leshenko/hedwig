@@ -275,8 +275,8 @@ static int connectToSerialVerbose(const vector<String> &possibleDevices)
 
 void displayCamerasRange(CameraData &cameras, vector<Point3d> &displayCluster) {
 
-	float edge[3] = {180, 180, 180};
-	float shift[3] = {-50, 0, -110};
+	float edge[3] = {220, 180, 220};
+	float shift[3] = {-140, 0, -110};
 	int density[3] = {20, 20, 20};
 
 	Mat homoSamplingCluster{4, density[0] * density[1] * density[2], CV_64F};
@@ -346,8 +346,6 @@ void displayCamerasRange(CameraData &cameras, vector<Point3d> &displayCluster) {
 
 //	for(vector<Point3d>::iterator it = displayCluster.begin(); it != displayCluster.end(); ++it)
 //		std::cout << (*it) << std::endl;
-
-
 }
 
 int main(int argc, char *argv[])
@@ -407,7 +405,10 @@ int main(int argc, char *argv[])
 	window.showWidget("drone_direction", cv::viz::WArrow{Point3f{0, 0, 0}, Point3f{0, 0, -20}});
 	vector<Point3d> displayCluster;
 	displayCamerasRange(cameras, displayCluster);
-	window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+	//window.showWidget("range", cv::viz::WCloud{displayCluster, cv::viz::Color::yellow()});
+
+	Vec3f target = {20, 20, 20};
+	window.showWidget("target_point", cv::viz::WSphere{Point3f{target}, 3, 10, cv::viz::Color::violet()});
 
 	ChannelBounds channels[4];
 	Pid pids[4];
@@ -424,12 +425,11 @@ int main(int argc, char *argv[])
 	while (!window.wasStopped()) {
 		bool found = triangulateChessboardPoints(currPoints, cameras, cfg.droneChessboardSize);
 
-		if (found && initialPoints.size() == currPoints.size())
+		if (found)
 		{
 			Vec3f pos = centroid(currPoints);
 			Mat rot = kabtschSVDRotation(initialPoints, currPoints);
 
-			Vec3f target = {0, 0, 0};
 			Vec4f controlErrors = calculateControlErrors(pos, rot, target);
 
 			Vec4f pidedErrors;
@@ -457,6 +457,9 @@ int main(int argc, char *argv[])
 
 				window.setWidgetPose("drone", currTransform);
 				window.setWidgetPose("drone_direction", currTransform);
+
+				Point3f pidViz = Vec3f{pidedErrors[0], pidedErrors[2], -pidedErrors[1]} * 40 + target;
+				window.showWidget("pid_arrow", cv::viz::WArrow{Point3f{target}, pidViz, 0.03, cv::viz::Color::cherry()});
 			}
 		}
 

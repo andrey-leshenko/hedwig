@@ -83,7 +83,6 @@ bool doExternalCalibration(CameraData &cameras, Size chessboardSize, float squar
 		cameras.transforms[i] = transform.inv();
 	}
 
-
 	return true;
 }
 
