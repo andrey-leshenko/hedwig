@@ -273,6 +273,35 @@ static int connectToSerialVerbose(const vector<String> &possibleDevices)
 	return serialfd;
 }
 
+static bool saveDroneDataToFile(const vector<Point3f> &dronePoints, const char *path)
+{
+	FileStorage fs(path, FileStorage::WRITE);
+
+	if (!fs.isOpened()) {
+		return false;
+	}
+
+	fs << "drone_points" << dronePoints;
+
+	return true;
+}
+
+static bool loadDroneDataFromFile(vector<Point3f> &dronePoints, const char *path)
+{
+	FileStorage fs(path, FileStorage::READ);
+
+	if (!fs.isOpened()) {
+		return false;
+	}
+	if (!fs["drone_points"].isSeq()) {
+		return false;
+	}
+
+	fs["drone_points"] >> dronePoints;
+
+	return true;
+}
+
 void displayCamerasRange(CameraData &cameras, vector<Point3d> &displayCluster) {
 
 	float edge[3] = {220, 180, 220};
@@ -382,7 +411,7 @@ int main(int argc, char *argv[])
 	vector<Point3f> initialPoints;
 	vector<Point3f> currPoints;
 
-	if (false) {
+	if (loadDroneDataFromFile(initialPoints, "drone_points.yaml")) {
 		std::cout << "Successully loaded drone point data." << std::endl;
 	}
 	else {
@@ -391,6 +420,7 @@ int main(int argc, char *argv[])
 		while (!triangulateChessboardPoints(initialPoints, cameras, cfg.droneChessboardSize)) {
 			std::cout << "Couldn't find drone, retrying..." << std::endl;
 		}
+		saveDroneDataToFile(initialPoints, "drone_points.yaml");
 	}
 
 	cv::viz::Viz3d window{"Flight Control"};
